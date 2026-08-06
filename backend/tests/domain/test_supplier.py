@@ -1,0 +1,37 @@
+import pytest
+
+from app.domain.supplier import Address, InvalidSupplierDataError, Supplier, SupplierStatus
+(
+    Address,
+    SupplierStatus,
+    InvalidSupplierDataError,
+    Supplier,
+)
+
+def create_supplier() -> Supplier:
+    return Supplier(
+        id="1",
+        name="Test Supplier",
+        email="test@test.com",
+        phone="1234567890",
+        tax_id="123456789",
+        address=Address(
+            street="123 Test St",
+            city="Test City",
+            state="Test State",
+            zip_code="12345",
+            country="Test Country"
+        ),
+    )
+
+def test_supplier_can_be_submitted_for_review() -> None:
+    supplier = create_supplier()
+    supplier.submit_for_review()
+    assert supplier.status == SupplierStatus.UNDER_REVIEW
+
+def test_supplier_approved_can_be_submitted_again() -> None:
+    supplier = create_supplier()
+    supplier.status = SupplierStatus.APPROVED
+
+    with pytest.raises(InvalidSupplierDataError):
+        supplier.submit_for_review()    
