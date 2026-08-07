@@ -1,16 +1,15 @@
+from uuid import uuid4
+
 import pytest
 
-from app.domain.supplier import Address, InvalidSupplierDataError, Supplier, SupplierStatus
-(
-    Address,
-    SupplierStatus,
-    InvalidSupplierDataError,
-    Supplier,
-)
+from backend.app.domain.entities.address import Address
+from backend.app.domain.entities.supplier import Supplier
+from backend.app.domain.enums.supplier_status import SupplierStatus
+from backend.app.domain.exceptions import DomainError
 
 def create_supplier() -> Supplier:
     return Supplier(
-        id="1",
+        supplier_id=uuid4(),
         name="Test Supplier",
         email="test@test.com",
         phone="1234567890",
@@ -20,7 +19,7 @@ def create_supplier() -> Supplier:
             city="Test City",
             state="Test State",
             zip_code="12345",
-            country="Test Country"
+            country="Test Country",
         ),
     )
 
@@ -29,9 +28,9 @@ def test_supplier_can_be_submitted_for_review() -> None:
     supplier.submit_for_review()
     assert supplier.status == SupplierStatus.UNDER_REVIEW
 
-def test_supplier_approved_can_be_submitted_again() -> None:
+def test_approved_supplier_cannot_be_submitted_again() -> None:
     supplier = create_supplier()
     supplier.status = SupplierStatus.APPROVED
 
-    with pytest.raises(InvalidSupplierDataError):
-        supplier.submit_for_review()    
+    with pytest.raises(DomainError):
+        supplier.submit_for_review()
