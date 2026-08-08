@@ -6,8 +6,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from backend.app.domain.exceptions import DomainError
+from backend.app.features.suppliers.analyze.exceptions import SupplierNotFoundError
 from backend.app.features.suppliers.create.exceptions import (
     SupplierAlreadyExistsError,
+)
+from backend.app.features.suppliers.analyze.exceptions import (
+    InvalidSupplierAnalysisResponseError,
+    SupplierAnalysisProviderError,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,6 +30,46 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "code": "supplier_already_exists",
                 "message": "A supplier with this tax ID already exists.",
                 "details": {"tax_id": exc.tax_id},
+            },
+        )
+
+    @app.exception_handler(SupplierNotFoundError)
+    async def handle_supplier_not_found(
+        request: Request,
+        exc: SupplierNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": "supplier_not_found",
+                "message": "The supplier was not found.",
+                "details": {"supplier_id": str(exc.supplier_id)},
+            },
+        )
+
+    @app.exception_handler(InvalidSupplierAnalysisResponseError)
+    async def handle_invalid_analysis_response(
+        request: Request,
+        exc: InvalidSupplierAnalysisResponseError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "code": "invalid_ai_provider_response",
+                "message": "The AI provider returned an invalid response.",
+            },
+        )
+
+    @app.exception_handler(SupplierAnalysisProviderError)
+    async def handle_analysis_provider_error(
+        request: Request,
+        exc: SupplierAnalysisProviderError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": "ai_provider_unavailable",
+                "message": "The AI analysis provider is temporarily unavailable.",
             },
         )
 

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from backend.app.dependencies import get_create_supplier_handler
+from backend.app.bootstrap.dependencies import get_create_supplier_handler
 from backend.app.features.suppliers.create.handler import CreateSupplierHandler
 from backend.app.features.suppliers.create.mapper import map_request_to_command
 from backend.app.features.suppliers.create.models import (

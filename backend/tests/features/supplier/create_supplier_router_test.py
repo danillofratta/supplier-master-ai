@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.app.dependencies import get_create_supplier_handler
+from backend.app.bootstrap.dependencies import get_create_supplier_handler
 from backend.app.domain.entities.address import Address
 from backend.app.domain.entities.supplier import Supplier
 from backend.app.domain.enums.supplier_status import SupplierStatus

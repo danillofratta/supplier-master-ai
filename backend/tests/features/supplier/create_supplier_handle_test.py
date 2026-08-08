@@ -3,7 +3,7 @@ import pytest
 from backend.app.features.suppliers.create.handler import CreateSupplierHandler
 from backend.app.features.suppliers.create.models import CreateSupplierAddressCommand, CreateSupplierCommand
 from backend.app.features.suppliers.create.exceptions import SupplierAlreadyExistsError
-from backend.app.infrastructure.supplier_repository import InMemorySupplierRepository
+from backend.app.infrastructure.repositories.supplier_repository import InMemorySupplierRepository
 
 @pytest.mark.asyncio
 async def test_should_not_create_duplicate_supplier() -> None:
