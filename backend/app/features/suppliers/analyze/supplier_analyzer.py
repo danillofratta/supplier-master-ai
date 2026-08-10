@@ -6,6 +6,7 @@ from backend.app.domain.enums.supplier_recommended_action import (
     SupplierRecommendedAction,
 )
 from backend.app.domain.enums.supplier_risk_level import SupplierRiskLevel
+from backend.app.features.suppliers.analyze.policy_context import PolicyContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,8 +17,13 @@ class SupplierAnalysisResult:
     confidence: float
     missing_documents: tuple[str, ...] = field(default_factory=tuple)
     policy_violations: tuple[str, ...] = field(default_factory=tuple)
+    retrieved_policy_ids: tuple[str, ...] = field(default_factory=tuple)
 
 
 class SupplierAnalyzer(Protocol):
-    async def analyze(self, supplier: Supplier) -> SupplierAnalysisResult:
+    async def analyze(
+        self,
+        supplier: Supplier,
+        policies: tuple[PolicyContext, ...],
+    ) -> SupplierAnalysisResult:
         ...

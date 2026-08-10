@@ -1,6 +1,7 @@
 import json
 
 from backend.app.domain.entities.supplier import Supplier
+from backend.app.features.suppliers.analyze.policy_context import PolicyContext
 
 
 SUPPLIER_ANALYSIS_PROMPT_VERSION = "supplier-analysis-prompt-v1"
@@ -40,25 +41,26 @@ Rules:
 
 def build_supplier_analysis_prompt(
     supplier: Supplier,
+    policies: tuple[PolicyContext, ...]
 ) -> str:
-    supplier_data = {
-        "supplier_id": str(supplier.supplier_id),
-        "name": supplier.name,
-        "email": supplier.email,
-        "phone": supplier.phone,
-        "tax_id": supplier.tax_id,
-        "status": supplier.status.value,
-        "address": {
-            "street": supplier.address.street,
-            "city": supplier.address.city,
-            "state": supplier.address.state,
-            "zip_code": supplier.address.zip_code,
-            "country": supplier.address.country,
-        },
-        "available_documents": [],
-    }
-
-    return (
-        "Analyze the supplier below.\n\n"
-        f"Supplier data:\n{json.dumps(supplier_data, ensure_ascii=False)}"
+    policy_context = "\n\n".join(
+        (
+            f"[Document: {policy.document_id}]"
+            f"[Version: {policy.version}]\n"
+            f"{policy.content}"
+        )
+        for policy in policies
     )
+
+    return f"""
+        Analyze the supplier using only the supplied data and policy context.
+
+        SUPPLIER:
+        {supplier}
+
+        POLICY CONTEXT:
+        {policy_context}
+
+        If the policies do not provide sufficient evidence, recommend human review.
+        Do not invent policies or supplier information.
+        """.strip()

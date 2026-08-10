@@ -10,9 +10,10 @@ from backend.app.domain.enums.supplier_risk_level import SupplierRiskLevel
 from backend.app.infrastructure.ai.bedrock_supplier_analyzer import (
     BedrockSupplierAnalyzer,
 )
-from backend.app.application.ai.exceptions import (
+from backend.app.features.suppliers.analyze.exceptions import (
     InvalidSupplierAnalysisResponseError,
 )
+from backend.app.features.suppliers.analyze.policy_context import PolicyContext
 from backend.tests.features.supplier.create_supplier_router_test import (
     build_supplier,
 )
@@ -55,7 +56,21 @@ async def test_bedrock_response_is_mapped_to_application_result() -> None:
     )
     analyzer = build_analyzer(response_text)
 
-    result = await analyzer.analyze(build_supplier(uuid4()))
+    result = await analyzer.analyze(
+        build_supplier(uuid4()),
+        (
+            PolicyContext(
+                document_id="policy-001",
+                chunk_id="chunk-001",
+                title="Policy",
+                content="Supplier policy context.",
+                policy_type="compliance",
+                version="1.0",
+                effective_date="2026-01-01",
+                score=0.9,
+            ),
+        ),
+    )
 
     assert result.risk_level == SupplierRiskLevel.LOW
     assert result.recommended_action == SupplierRecommendedAction.APPROVE
@@ -67,4 +82,18 @@ async def test_invalid_bedrock_response_is_rejected() -> None:
     analyzer = build_analyzer('{"risk_level": "unknown"}')
 
     with pytest.raises(InvalidSupplierAnalysisResponseError):
-        await analyzer.analyze(build_supplier(uuid4()))
+        await analyzer.analyze(
+            build_supplier(uuid4()),
+            (
+                PolicyContext(
+                    document_id="policy-001",
+                    chunk_id="chunk-001",
+                    title="Policy",
+                    content="Supplier policy context.",
+                    policy_type="compliance",
+                    version="1.0",
+                    effective_date="2026-01-01",
+                    score=0.9,
+                ),
+            ),
+        )

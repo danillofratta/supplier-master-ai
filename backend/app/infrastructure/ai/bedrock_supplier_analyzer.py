@@ -16,7 +16,7 @@ from backend.app.features.suppliers.analyze.prompt import (
     SYSTEM_PROMPT,
     build_supplier_analysis_prompt,
 )
-from backend.app.application.ai.exceptions import (
+from backend.app.features.suppliers.analyze.exceptions import (
     InvalidSupplierAnalysisResponseError,
     SupplierAnalysisProviderError,
 )
@@ -42,8 +42,12 @@ class BedrockSupplierAnalyzer(SupplierAnalyzer):
             region_name=region_name,
         )
 
-    async def analyze(self, supplier: Supplier) -> SupplierAnalysisResult:
-        user_prompt = build_supplier_analysis_prompt(supplier)
+    async def analyze(
+        self,
+        supplier: Supplier,
+        policies,
+    ) -> SupplierAnalysisResult:
+        user_prompt = build_supplier_analysis_prompt(supplier, policies)
 
         try:
             response = await asyncio.to_thread(self._converse, user_prompt)
@@ -77,6 +81,9 @@ class BedrockSupplierAnalyzer(SupplierAnalyzer):
             confidence=payload.confidence,
             missing_documents=tuple(payload.missing_documents),
             policy_violations=tuple(payload.policy_violations),
+            retrieved_policy_ids=tuple(
+                dict.fromkeys(policy.document_id for policy in policies)
+            ),
         )
 
     def _converse(self, user_prompt: str) -> dict[str, Any]:

@@ -45,6 +45,7 @@ def test_analyze_supplier_returns_api_response() -> None:
         "recommended_action": "human_review",
         "missing_documents": ["bank_account_confirmation"],
         "policy_violations": [],
+        "retrieved_policy_ids": [],
         "summary": "Manual review is required.",
         "confidence": 0.82,
     }

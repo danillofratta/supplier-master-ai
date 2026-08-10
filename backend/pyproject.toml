@@ -12,6 +12,8 @@ dependencies = [
     "pydantic>=2.10,<3.0",
     "pydantic-settings>=2.7,<3.0",
     "uvicorn[standard]>=0.34,<1.0",
+    "sqlalchemy",
+    "asyncpg",
 ]
 
 [project.optional-dependencies]
@@ -22,12 +24,14 @@ dev = [
     "httpx>=0.28,<1.0",
     "pytest>=8.3,<10.0",
     "pytest-asyncio>=0.25,<1.0",
+     "alembic",
 ]
 all = [
     "boto3>=1.35,<2.0",
     "httpx>=0.28,<1.0",
     "pytest>=8.3,<10.0",
     "pytest-asyncio>=0.25,<1.0",
+    "alembic>=1.14,<2.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     bedrock_model_id: str | None = None
     bedrock_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     bedrock_max_tokens: int = Field(default=1000, gt=0)
+    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/supplier_db"
 
     model_config = SettingsConfigDict(
         env_file=".env",
