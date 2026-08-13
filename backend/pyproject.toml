@@ -20,6 +20,10 @@ dependencies = [
 ai = [
     "boto3>=1.35,<2.0",
 ]
+retrieval = [
+    "boto3>=1.35,<2.0",
+    "opensearch-py>=2.8,<4.0",
+]
 dev = [
     "httpx>=0.28,<1.0",
     "pytest>=8.3,<10.0",
@@ -28,6 +32,7 @@ dev = [
 ]
 all = [
     "boto3>=1.35,<2.0",
+    "opensearch-py>=2.8,<4.0",
     "httpx>=0.28,<1.0",
     "pytest>=8.3,<10.0",
     "pytest-asyncio>=0.25,<1.0",

@@ -26,12 +26,22 @@ class IngestPolicyHandler:
         chunks = self._chunker.split(command)
 
         if not chunks:
-            raise EmptyPolicyContentError(command.document_id)
+            raise EmptyPolicyContentError(
+                command.document_id
+            )
+
+        await self._policy_index.delete_document(
+            document_id=command.document_id,
+            version=command.version,
+        )
 
         indexed_chunks: list[IndexedPolicyChunk] = []
 
         for chunk in chunks:
-            embedding = await self._embedding_provider.generate(chunk.content)
+            embedding = await self._embedding_provider.generate(
+                chunk.content
+            )
+
             indexed_chunks.append(
                 IndexedPolicyChunk(
                     chunk=chunk,
@@ -40,12 +50,17 @@ class IngestPolicyHandler:
             )
 
         indexed_chunks_tuple = tuple(indexed_chunks)
-        await self._policy_index.upsert(indexed_chunks_tuple)
+
+        await self._policy_index.upsert(
+            indexed_chunks_tuple
+        )
 
         return IngestPolicyResult(
             document_id=command.document_id,
             chunks_indexed=len(indexed_chunks_tuple),
-            embedding_dimensions=self._embedding_provider.dimensions,
+            embedding_dimensions=(
+                self._embedding_provider.dimensions
+            ),
         )
 
 

@@ -1,9 +1,9 @@
-from attr import dataclass
+from dataclasses import dataclass
 
-from backend.app.features.policies.ingest.police_chunk import PolicyChunk
+from backend.app.features.policies.ingest.policy_chunk import PolicyChunk
 
 
 @dataclass(frozen=True, slots=True)
 class IndexedPolicyChunk:
     chunk: PolicyChunk
-    embedding: tuple[float]
+    embedding: tuple[float, ...]

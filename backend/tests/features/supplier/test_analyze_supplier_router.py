@@ -23,7 +23,7 @@ class FakeAnalyzeSupplierHandler:
             missing_documents=("bank_account_confirmation",),
             policy_violations=(),
             summary="Manual review is required.",
-            confidence=0.82,
+            confidence=0.91
         )
 
 
@@ -47,5 +47,5 @@ def test_analyze_supplier_returns_api_response() -> None:
         "policy_violations": [],
         "retrieved_policy_ids": [],
         "summary": "Manual review is required.",
-        "confidence": 0.82,
+        "confidence": 0.91,
     }

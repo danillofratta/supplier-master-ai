@@ -5,6 +5,9 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.app.infrastructure.persistence.repositories.supplier_onboarding_workflow_repository import (
+    PostgreSQLSupplierOnboardingWorkflowRepository,
+)
 from backend.app.infrastructure.persistence.repositories.supplier_repository import (
     PostgreSQLSupplierRepository,
 )
@@ -18,10 +21,16 @@ class SqlAlchemySupplierUnitOfWork:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
         self.suppliers: PostgreSQLSupplierRepository
+        self.onboarding_workflows: PostgreSQLSupplierOnboardingWorkflowRepository
 
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
         self.suppliers = PostgreSQLSupplierRepository(self._session)
+        self.onboarding_workflows = (
+            PostgreSQLSupplierOnboardingWorkflowRepository(
+                self._session
+            )
+        )
         return self
 
     async def __aexit__(

@@ -10,4 +10,4 @@ class PolicyChunk:
     policy_type: str
     version: str
     effective_date: str
-    score: float
+    position: int

@@ -1,0 +1,11 @@
+Supplier Onboarding Policy
+
+All suppliers must provide a valid tax identification number.
+
+International suppliers require manual compliance review before activation.
+
+Suppliers must provide official bank account ownership confirmation before payment information can be approved.
+
+Suppliers classified as high risk must be reviewed by the Compliance team.
+
+Missing mandatory documentation requires the supplier onboarding workflow to remain in pending review status.

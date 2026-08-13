@@ -1,9 +1,10 @@
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
 from backend.app.bootstrap.settings import Settings, get_settings
+from backend.app.features.policies.ingest.embedding_provider import EmbeddingProvider
 from backend.app.features.suppliers.analyze.exceptions import (
     SupplierAnalysisProviderError,
 )
@@ -87,12 +88,98 @@ def get_supplier_analyzer(
 
 
 @lru_cache
-def _build_policy_retriever() -> PolicyRetriever:
-    return NullPolicyRetriever()
+def _build_embedding_provider(
+    region_name: str,
+    model_id: str,
+    dimensions: int,
+) -> EmbeddingProvider:
+    try:
+        from backend.app.infrastructure.ai.bedrock.titan_embedding_provider import (
+            TitanEmbeddingProvider,
+        )
+    except ModuleNotFoundError as exc:
+        raise SupplierAnalysisProviderError(
+            "Embedding support is not installed. Install the 'retrieval' extra."
+        ) from exc
+
+    return TitanEmbeddingProvider(
+        region_name=region_name,
+        model_id=model_id,
+        dimensions=dimensions,
+    )
 
 
-def get_policy_retriever() -> PolicyRetriever:
-    return _build_policy_retriever()
+def get_embedding_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmbeddingProvider:
+    return _build_embedding_provider(
+        settings.aws_region,
+        settings.embedding_model_id,
+        settings.embedding_dimensions,
+    )
+
+
+@lru_cache
+def _build_opensearch_client(
+    endpoint: str,
+    region: str,
+    service: str,
+) -> Any:
+    try:
+        from backend.app.infrastructure.retrieval.opensearch.client import (
+            create_opensearch_client,
+        )
+        return create_opensearch_client(
+            endpoint=endpoint,
+            region=region,
+            service=service,
+        )
+    except Exception as exc:
+        raise SupplierAnalysisProviderError(
+            "Unable to configure Amazon OpenSearch retrieval."
+        ) from exc
+
+
+@lru_cache
+def _build_policy_retriever(
+    endpoint: str,
+    region: str,
+    service: str,
+    index_name: str,
+    embedding_model_id: str,
+    embedding_dimensions: int,
+) -> PolicyRetriever:
+    from backend.app.infrastructure.retrieval.opensearch.policy_retriever import (
+        OpenSearchPolicyRetriever,
+    )
+
+    client = _build_opensearch_client(endpoint, region, service)
+    embedding_provider = _build_embedding_provider(
+        region,
+        embedding_model_id,
+        embedding_dimensions,
+    )
+    return OpenSearchPolicyRetriever(
+        client=client,
+        embedding_provider=embedding_provider,
+        index_name=index_name,
+    )
+
+
+def get_policy_retriever(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PolicyRetriever:
+    if not settings.opensearch_endpoint:
+        return NullPolicyRetriever()
+
+    return _build_policy_retriever(
+        settings.opensearch_endpoint,
+        settings.aws_region,
+        settings.opensearch_service,
+        settings.opensearch_index_name,
+        settings.embedding_model_id,
+        settings.embedding_dimensions,
+    )
 
 
 def get_analyze_supplier_handler(

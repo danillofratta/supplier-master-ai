@@ -46,6 +46,9 @@ class AnalyzeSupplierHandler:
                 recommended_action=SupplierRecommendedAction.HUMAN_REVIEW,
                 summary="No relevant policy was retrieved for this supplier.",
                 confidence=0.0,
+                missing_documents=(),
+                policy_violations=(),
+                retrieved_policy_ids=(),
             )
 
         analysis = await self._supplier_analyzer.analyze(

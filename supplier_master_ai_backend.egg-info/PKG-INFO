@@ -1,0 +1,28 @@
+Metadata-Version: 2.4
+Name: supplier-master-ai-backend
+Version: 0.2.0
+Summary: Supplier Master AI backend built with FastAPI
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1.0,>=0.115
+Requires-Dist: pydantic<3.0,>=2.10
+Requires-Dist: pydantic-settings<3.0,>=2.7
+Requires-Dist: uvicorn[standard]<1.0,>=0.34
+Requires-Dist: sqlalchemy
+Requires-Dist: asyncpg
+Provides-Extra: ai
+Requires-Dist: boto3<2.0,>=1.35; extra == "ai"
+Provides-Extra: retrieval
+Requires-Dist: boto3<2.0,>=1.35; extra == "retrieval"
+Requires-Dist: opensearch-py<4.0,>=2.8; extra == "retrieval"
+Provides-Extra: dev
+Requires-Dist: httpx<1.0,>=0.28; extra == "dev"
+Requires-Dist: pytest<10.0,>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio<1.0,>=0.25; extra == "dev"
+Requires-Dist: alembic; extra == "dev"
+Provides-Extra: all
+Requires-Dist: boto3<2.0,>=1.35; extra == "all"
+Requires-Dist: opensearch-py<4.0,>=2.8; extra == "all"
+Requires-Dist: httpx<1.0,>=0.28; extra == "all"
+Requires-Dist: pytest<10.0,>=8.3; extra == "all"
+Requires-Dist: pytest-asyncio<1.0,>=0.25; extra == "all"
+Requires-Dist: alembic<2.0,>=1.14; extra == "all"

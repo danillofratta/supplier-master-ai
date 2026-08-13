@@ -3,6 +3,9 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Self
 
+from backend.app.infrastructure.persistence.repositories.supplier_onboarding_workflow_repository import (
+    InMemorySupplierOnboardingWorkflowRepository,
+)
 from backend.app.infrastructure.persistence.repositories.supplier_repository import (
     InMemorySupplierRepository,
 )
@@ -12,8 +15,13 @@ class InMemorySupplierUnitOfWork:
     def __init__(
         self,
         repository: InMemorySupplierRepository | None = None,
+        onboarding_repository: InMemorySupplierOnboardingWorkflowRepository | None = None,
     ) -> None:
         self.suppliers = repository or InMemorySupplierRepository()
+        self.onboarding_workflows = (
+            onboarding_repository
+            or InMemorySupplierOnboardingWorkflowRepository()
+        )
         self.committed = False
         self.rolled_back = False
 
