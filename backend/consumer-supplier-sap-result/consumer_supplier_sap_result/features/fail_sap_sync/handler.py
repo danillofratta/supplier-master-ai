@@ -24,10 +24,19 @@ class FailSapSyncHandler:
             workflow = await uow.workflows.get_by_id(
                 command.workflow_id
             )
-
             if workflow is None:
                 raise ValueError(
                     f"Workflow '{command.workflow_id}' not found."
+                )
+
+            if workflow.correlation_id != command.correlation_id:
+                raise ValueError(
+                    "Correlation ID does not match the supplier workflow."
+                )
+
+            if workflow.supplier_id != command.supplier_id:
+                raise ValueError(
+                    "Supplier ID does not match the supplier workflow."
                 )
 
             workflow.fail(command.reason)
@@ -38,5 +47,4 @@ class FailSapSyncHandler:
                 "supplier.sap-sync.failed.v1",
             )
             await uow.commit()
-
             return True

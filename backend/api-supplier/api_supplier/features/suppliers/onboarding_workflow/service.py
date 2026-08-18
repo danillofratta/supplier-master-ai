@@ -10,8 +10,9 @@ from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
 )
 from api_supplier.features.suppliers.onboarding_workflow.integration_events import (
     SAP_SYNC_REQUESTED_V1,
-    SapSyncRequestedV1,
+    build_sap_sync_requested_payload,
 )
+from api_supplier.shared.messaging.integration_event import IntegrationEvent
 from api_supplier.shared.unit_of_work import SupplierUnitOfWork
 
 
@@ -83,12 +84,17 @@ class SupplierOnboardingWorkflowService:
 
             workflow.start_sap_sync()
 
-            integration_event = SapSyncRequestedV1.from_supplier(
-                workflow_id=workflow.workflow_id,
-                supplier=supplier,
+            integration_event = IntegrationEvent.create(
+                correlation_id=workflow.correlation_id,
+                event_type=SAP_SYNC_REQUESTED_V1,
+                payload=build_sap_sync_requested_payload(
+                    supplier=supplier,
+                    workflow_id=workflow.workflow_id,
+                ),
             )
             outbox_message = OutboxMessage.create(
-                event_type=SAP_SYNC_REQUESTED_V1,
+                message_id=integration_event.message_id,
+                event_type=integration_event.event_type,
                 payload=integration_event.to_json(),
             )
 

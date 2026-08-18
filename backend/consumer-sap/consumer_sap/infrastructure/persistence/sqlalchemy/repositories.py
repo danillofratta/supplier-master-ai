@@ -2,8 +2,12 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from consumer_sap.domain.entities.sap_sync_operation import SapSyncOperation
-from consumer_sap.domain.enums.sap_sync_status import SapSyncStatus
+from consumer_sap.domain.entities.sap_sync_operation import (
+    SapSyncOperation,
+)
+from consumer_sap.domain.enums.sap_sync_status import (
+    SapSyncStatus,
+)
 from consumer_sap.infrastructure.persistence.sqlalchemy.models import (
     InboxMessageModel,
     OutboxMessageModel,
@@ -60,6 +64,7 @@ class PostgreSQLOperationRepository:
         return SapSyncOperation(
             operation_id=model.operation_id,
             message_id=model.message_id,
+            correlation_id=model.correlation_id,
             workflow_id=model.workflow_id,
             supplier_id=model.supplier_id,
             tax_id=model.tax_id,
@@ -80,13 +85,12 @@ class PostgreSQLOperationRepository:
             SapSyncOperationModel(
                 operation_id=operation.operation_id,
                 message_id=operation.message_id,
+                correlation_id=operation.correlation_id,
                 workflow_id=operation.workflow_id,
                 supplier_id=operation.supplier_id,
                 tax_id=operation.tax_id,
                 status=operation.status.value,
-                business_partner_id=(
-                    operation.business_partner_id
-                ),
+                business_partner_id=operation.business_partner_id,
                 sap_supplier_id=operation.sap_supplier_id,
                 attempts=operation.attempts,
                 failure_reason=operation.failure_reason,
@@ -136,7 +140,4 @@ class PostgreSQLOutboxRepository:
                 attempts=message.attempts,
             )
         )
-
-        # Forces INSERT errors to surface here instead of being hidden until
-        # a later operation. The transaction is still committed by the UoW.
         await self._session.flush()

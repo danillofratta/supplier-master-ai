@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "supplier.sap-sync.failed.v1",
+  "type": "object",
+  "required": [
+    "message_id",
+    "correlation_id",
+    "event_type",
+    "version",
+    "occurred_at",
+    "payload"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "supplier.sap-sync.failed.v1"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "supplier_id",
+        "reason"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "supplier_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

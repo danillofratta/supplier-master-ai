@@ -19,9 +19,17 @@ from worker_sap_outbox.infrastructure.messaging.sqs_message_publisher import (
 from worker_sap_outbox.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SqlAlchemySapOutboxUnitOfWork,
 )
+from worker_sap_outbox.shared.logging import (
+    configure_logging,
+)
+from worker_sap_outbox.shared.observability import (
+    configure_tracing,
+)
 
 
 load_dotenv()
+logger = configure_logging("worker-sap-outbox")
+tracer = configure_tracing("worker-sap-outbox")
 
 
 async def run() -> None:
@@ -53,20 +61,21 @@ async def run() -> None:
         )
     )
 
-    print("worker-sap-outbox started")
+    logger.info("worker started")
 
     try:
         while True:
             result = await handler.handle(
                 PublishOutboxCommand(limit=50)
             )
-
             if result.published or result.failed:
-                print(
-                    f"Outbox published={result.published} "
-                    f"failed={result.failed}"
+                logger.info(
+                    "outbox batch processed",
+                    extra={
+                        "published": result.published,
+                        "failed": result.failed,
+                    },
                 )
-
             await asyncio.sleep(interval)
     finally:
         await engine.dispose()

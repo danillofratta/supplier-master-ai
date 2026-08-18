@@ -1,4 +1,3 @@
-import json
 from uuid import UUID
 
 from consumer_sap.features.sync_supplier.command import (
@@ -6,6 +5,10 @@ from consumer_sap.features.sync_supplier.command import (
 )
 from consumer_sap.features.sync_supplier.contracts import (
     AddressDto,
+    SAP_SYNC_REQUESTED_V1,
+)
+from consumer_sap.shared.messaging.integration_event import (
+    IntegrationEvent,
 )
 
 
@@ -14,36 +17,66 @@ class SqsMessageMapper:
     def to_sync_supplier_command(
         message: dict,
     ) -> SyncSupplierCommand:
-        body = json.loads(message["Body"])
-
-        attributes = message.get(
-            "MessageAttributes",
-            {},
+        event = IntegrationEvent.from_json(
+            message["Body"]
         )
 
-        message_id = attributes.get(
-            "message_id",
-            {},
-        ).get("StringValue")
-
-        if not message_id:
+        if event.event_type != SAP_SYNC_REQUESTED_V1:
             raise ValueError(
-                "SQS message does not contain message_id."
+                f"Unsupported event '{event.event_type}'."
+            )
+
+        payload = event.payload
+        required = [
+            "workflow_id",
+            "supplier_id",
+            "name",
+            "email",
+            "phone",
+            "tax_id",
+            "address",
+        ]
+        missing = [
+            field for field in required
+            if field not in payload
+        ]
+        if missing:
+            raise ValueError(
+                f"Invalid SAP sync request. Missing fields: {missing}"
+            )
+
+        address = payload["address"]
+        address_required = [
+            "street",
+            "city",
+            "state",
+            "zip_code",
+            "country",
+        ]
+        missing_address = [
+            field for field in address_required
+            if field not in address
+        ]
+        if missing_address:
+            raise ValueError(
+                "Invalid supplier address. "
+                f"Missing fields: {missing_address}"
             )
 
         return SyncSupplierCommand(
-            message_id=UUID(message_id),
-            workflow_id=UUID(body["workflow_id"]),
-            supplier_id=UUID(body["supplier_id"]),
-            name=body["name"],
-            email=body["email"],
-            phone=body["phone"],
-            tax_id=body["tax_id"],
+            message_id=event.message_id,
+            correlation_id=event.correlation_id,
+            workflow_id=UUID(payload["workflow_id"]),
+            supplier_id=UUID(payload["supplier_id"]),
+            name=payload["name"],
+            email=payload["email"],
+            phone=payload["phone"],
+            tax_id=payload["tax_id"],
             address=AddressDto(
-                street=body["address"]["street"],
-                city=body["address"]["city"],
-                state=body["address"]["state"],
-                zip_code=body["address"]["zip_code"],
-                country=body["address"]["country"],
+                street=address["street"],
+                city=address["city"],
+                state=address["state"],
+                zip_code=address["zip_code"],
+                country=address["country"],
             ),
         )

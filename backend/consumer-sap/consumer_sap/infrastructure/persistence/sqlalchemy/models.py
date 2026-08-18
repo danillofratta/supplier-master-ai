@@ -37,13 +37,20 @@ class SapSyncOperationModel(Base):
         unique=True,
         nullable=False,
     )
+    correlation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
     workflow_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         nullable=False,
+        index=True,
     )
     supplier_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         nullable=False,
+        index=True,
     )
     tax_id: Mapped[str] = mapped_column(
         String(100),
@@ -53,6 +60,7 @@ class SapSyncOperationModel(Base):
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
+        index=True,
     )
     business_partner_id: Mapped[str | None] = mapped_column(
         String(100),

@@ -1,5 +1,5 @@
--- Supplier bounded context
--- Database: supplier_db
+-- Complete schema for the Supplier bounded context.
+-- Run against supplier_db.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -23,7 +23,14 @@ CREATE TABLE IF NOT EXISTS suppliers (
         UNIQUE (normalized_tax_id),
 
     CONSTRAINT ck_suppliers_status
-        CHECK (status IN ('draft', 'under_review', 'approved', 'rejected'))
+        CHECK (
+            status IN (
+                'DRAFT',
+                'UNDER_REVIEW',
+                'APPROVED',
+                'REJECTED'
+            )
+        )
 );
 
 CREATE INDEX IF NOT EXISTS ix_suppliers_normalized_tax_id
@@ -31,6 +38,7 @@ CREATE INDEX IF NOT EXISTS ix_suppliers_normalized_tax_id
 
 CREATE TABLE IF NOT EXISTS supplier_onboarding_workflow (
     workflow_id              UUID PRIMARY KEY,
+    correlation_id           UUID NOT NULL,
     supplier_id              UUID NOT NULL,
     status                   VARCHAR(30) NOT NULL,
     service_now_ticket_id    VARCHAR(100),
@@ -62,9 +70,13 @@ CREATE TABLE IF NOT EXISTS supplier_onboarding_workflow (
 CREATE INDEX IF NOT EXISTS ix_supplier_onboarding_supplier_id
     ON supplier_onboarding_workflow (supplier_id);
 
+CREATE INDEX IF NOT EXISTS ix_supplier_onboarding_correlation_id
+    ON supplier_onboarding_workflow (correlation_id);
+
 CREATE INDEX IF NOT EXISTS ix_supplier_onboarding_status
     ON supplier_onboarding_workflow (status);
 
+-- Transactional Outbox owned by Supplier.
 CREATE TABLE IF NOT EXISTS outbox_messages (
     message_id      UUID PRIMARY KEY,
     event_type      VARCHAR(200) NOT NULL,
@@ -73,7 +85,7 @@ CREATE TABLE IF NOT EXISTS outbox_messages (
     processed_at    TIMESTAMPTZ,
     attempts        INTEGER NOT NULL DEFAULT 0,
 
-    CONSTRAINT ck_outbox_attempts_non_negative
+    CONSTRAINT ck_supplier_outbox_attempts
         CHECK (attempts >= 0)
 );
 
@@ -84,7 +96,7 @@ CREATE INDEX IF NOT EXISTS ix_supplier_outbox_pending
 CREATE INDEX IF NOT EXISTS ix_supplier_outbox_event_type
     ON outbox_messages (event_type);
 
--- Used by consumer-supplier-sap-result for idempotency.
+-- Inbox for result consumers that update Supplier state.
 CREATE TABLE IF NOT EXISTS inbox_messages (
     message_id      UUID PRIMARY KEY,
     event_type      VARCHAR(200) NOT NULL,

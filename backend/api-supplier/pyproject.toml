@@ -17,6 +17,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+observability = [
+    "opentelemetry-instrumentation-fastapi>=0.49b0,<1.0",
+    "opentelemetry-api>=1.28,<2.0",
+    "opentelemetry-sdk>=1.28,<2.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28,<2.0",
+]
+
 ai = [
     "boto3>=1.35,<2.0",
 ]

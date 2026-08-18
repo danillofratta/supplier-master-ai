@@ -1,4 +1,3 @@
-import json
 from uuid import UUID
 
 from consumer_supplier_sap_result.features.complete_sap_sync.command import (
@@ -15,83 +14,73 @@ SAP_SYNC_FAILED_V1 = "supplier.sap-sync.failed.v1"
 
 class SqsMessageMapper:
     @staticmethod
-    def get_event_type(
-        message: dict,
-    ) -> str:
-        attributes = message.get(
-            "MessageAttributes",
-            {},
-        )
+    def _parse(message: dict) -> dict:
+        import json
 
-        event_type = attributes.get(
+        body = json.loads(message["Body"])
+        required = [
+            "message_id",
+            "correlation_id",
             "event_type",
-            {},
-        ).get("StringValue")
-
-        if not event_type:
+            "version",
+            "occurred_at",
+            "payload",
+        ]
+        missing = [
+            field for field in required
+            if field not in body
+        ]
+        if missing:
             raise ValueError(
-                "SQS message does not contain event_type."
+                f"Invalid integration event. Missing fields: {missing}"
             )
-
-        return event_type
+        if not isinstance(body["payload"], dict):
+            raise ValueError(
+                "Integration event payload must be an object."
+            )
+        return body
 
     @staticmethod
-    def _get_message_id(
-        message: dict,
-    ) -> UUID:
-        attributes = message.get(
-            "MessageAttributes",
-            {},
-        )
-
-        value = attributes.get(
-            "message_id",
-            {},
-        ).get("StringValue")
-
-        if not value:
-            # Fallback to event_id in the integration payload.
-            body = json.loads(message["Body"])
-            value = body.get("event_id")
-
-        if not value:
-            raise ValueError(
-                "SQS message does not contain a message identifier."
-            )
-
-        return UUID(value)
+    def get_event_type(message: dict) -> str:
+        return SqsMessageMapper._parse(message)[
+            "event_type"
+        ]
 
     @staticmethod
     def to_complete_command(
         message: dict,
     ) -> CompleteSapSyncCommand:
-        body = json.loads(message["Body"])
+        body = SqsMessageMapper._parse(message)
 
+        if body["event_type"] != SAP_SYNC_COMPLETED_V1:
+            raise ValueError(
+                f"Unexpected event type '{body['event_type']}'."
+            )
+
+        payload = body["payload"]
         required = [
             "workflow_id",
             "supplier_id",
             "business_partner_id",
         ]
         missing = [
-            field
-            for field in required
-            if not body.get(field)
+            field for field in required
+            if not payload.get(field)
         ]
         if missing:
             raise ValueError(
-                f"Invalid SAP completion message. Missing fields: {missing}"
+                f"Invalid SAP completion payload. Missing fields: {missing}"
             )
 
         return CompleteSapSyncCommand(
-            message_id=SqsMessageMapper._get_message_id(
-                message
-            ),
-            workflow_id=UUID(body["workflow_id"]),
-            supplier_id=UUID(body["supplier_id"]),
-            business_partner_id=body[
+            message_id=UUID(body["message_id"]),
+            correlation_id=UUID(body["correlation_id"]),
+            workflow_id=UUID(payload["workflow_id"]),
+            supplier_id=UUID(payload["supplier_id"]),
+            business_partner_id=payload[
                 "business_partner_id"
             ],
-            sap_supplier_id=body.get(
+            sap_supplier_id=payload.get(
                 "sap_supplier_id"
             ),
         )
@@ -100,28 +89,32 @@ class SqsMessageMapper:
     def to_fail_command(
         message: dict,
     ) -> FailSapSyncCommand:
-        body = json.loads(message["Body"])
+        body = SqsMessageMapper._parse(message)
 
+        if body["event_type"] != SAP_SYNC_FAILED_V1:
+            raise ValueError(
+                f"Unexpected event type '{body['event_type']}'."
+            )
+
+        payload = body["payload"]
         required = [
             "workflow_id",
             "supplier_id",
             "reason",
         ]
         missing = [
-            field
-            for field in required
-            if not body.get(field)
+            field for field in required
+            if not payload.get(field)
         ]
         if missing:
             raise ValueError(
-                f"Invalid SAP failure message. Missing fields: {missing}"
+                f"Invalid SAP failure payload. Missing fields: {missing}"
             )
 
         return FailSapSyncCommand(
-            message_id=SqsMessageMapper._get_message_id(
-                message
-            ),
-            workflow_id=UUID(body["workflow_id"]),
-            supplier_id=UUID(body["supplier_id"]),
-            reason=body["reason"],
+            message_id=UUID(body["message_id"]),
+            correlation_id=UUID(body["correlation_id"]),
+            workflow_id=UUID(payload["workflow_id"]),
+            supplier_id=UUID(payload["supplier_id"]),
+            reason=payload["reason"],
         )

@@ -19,9 +19,17 @@ from worker_supplier_outbox.infrastructure.messaging.sqs_message_publisher impor
 from worker_supplier_outbox.infrastructure.persistence.unit_of_work import (
     SqlAlchemyOutboxUnitOfWork,
 )
+from worker_supplier_outbox.shared.logging import (
+    configure_logging,
+)
+from worker_supplier_outbox.shared.observability import (
+    configure_tracing,
+)
 
 
 load_dotenv()
+logger = configure_logging("worker-supplier-outbox")
+tracer = configure_tracing("worker-supplier-outbox")
 
 
 async def run() -> None:
@@ -35,7 +43,9 @@ async def run() -> None:
     )
 
     handler = PublishOutboxHandler(
-        unit_of_work=SqlAlchemyOutboxUnitOfWork(factory),
+        unit_of_work=SqlAlchemyOutboxUnitOfWork(
+            factory
+        ),
         publisher=SqsMessagePublisher(
             queue_url=os.environ[
                 "SQS_SAP_REQUEST_QUEUE_URL"
@@ -51,7 +61,7 @@ async def run() -> None:
         )
     )
 
-    print("worker-supplier-outbox started")
+    logger.info("worker started")
 
     try:
         while True:
@@ -60,9 +70,12 @@ async def run() -> None:
             )
 
             if result.published or result.failed:
-                print(
-                    f"Outbox published={result.published} "
-                    f"failed={result.failed}"
+                logger.info(
+                    "outbox batch processed",
+                    extra={
+                        "published": result.published,
+                        "failed": result.failed,
+                    },
                 )
 
             await asyncio.sleep(interval)

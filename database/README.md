@@ -1,35 +1,32 @@
-# PostgreSQL bootstrap
+# PostgreSQL scripts
 
-## 1. Create the two databases
+These files are the only database bootstrap/upgrade scripts required by the
+project.
 
-From PowerShell:
+## New local environment
 
-```powershell
-psql -U postgres -d postgres -f 00_create_databases.sql
+```cmd
+psql -U postgres -d postgres -f database\00_create_databases.sql
+psql -U postgres -d supplier_db -f database\01_supplier_db.sql
+psql -U postgres -d sap_integration_db -f database\02_sap_integration_db.sql
 ```
 
-## 2. Create Supplier tables
+## Existing local environment
 
-```powershell
-psql -U postgres -d supplier_db -f 01_supplier_db.sql
+If the databases were created using an older project ZIP, run:
+
+```cmd
+psql -U postgres -d postgres -f database\03_upgrade_existing.sql
 ```
 
-## 3. Create SAP Integration tables
+## Verify
 
-```powershell
-psql -U postgres -d sap_integration_db -f 02_sap_integration_db.sql
+```cmd
+psql -U postgres -d postgres -f database\04_verify.sql
 ```
 
-## 4. Verify
+Database ownership:
 
-```powershell
-psql -U postgres -d supplier_db -f 03_verify.sql
-psql -U postgres -d sap_integration_db -f 03_verify.sql
-```
-
-Expected ownership:
-
-- `supplier_db`: `suppliers`, `supplier_onboarding_workflow`, `outbox_messages`, `inbox_messages`.
-- `sap_integration_db`: `inbox_messages`, `sap_sync_operations`, `outbox_messages`.
-
-The two bounded contexts do not use cross-database foreign keys.
+- `supplier_db`: API Supplier + Supplier Outbox worker + SAP result consumer.
+- `sap_integration_db`: SAP consumer + SAP Outbox worker.
+- No cross-database foreign keys are used.

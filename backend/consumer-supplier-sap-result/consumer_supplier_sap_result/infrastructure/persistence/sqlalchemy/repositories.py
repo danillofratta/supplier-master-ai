@@ -30,6 +30,7 @@ class PostgreSQLWorkflowRepository:
 
         return SupplierOnboardingWorkflow(
             workflow_id=model.workflow_id,
+            correlation_id=model.correlation_id,
             supplier_id=model.supplier_id,
             status=SupplierOnboardingStatus(model.status),
             sap_business_partner_id=(

@@ -15,6 +15,11 @@ class SupplierOnboardingWorkflowModel(Base):
         PG_UUID(as_uuid=True),
         primary_key=True,
     )
+    correlation_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
     supplier_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         nullable=False,

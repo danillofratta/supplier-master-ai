@@ -3,36 +3,60 @@
   "title": "supplier.sap-sync.completed.v1",
   "type": "object",
   "required": [
-    "event_id",
-    "workflow_id",
-    "supplier_id",
-    "business_partner_id",
-    "version"
+    "message_id",
+    "correlation_id",
+    "event_type",
+    "version",
+    "occurred_at",
+    "payload"
   ],
   "properties": {
-    "event_id": {
+    "message_id": {
       "type": "string",
       "format": "uuid"
     },
-    "workflow_id": {
+    "correlation_id": {
       "type": "string",
       "format": "uuid"
     },
-    "supplier_id": {
-      "type": "string",
-      "format": "uuid"
-    },
-    "business_partner_id": {
-      "type": "string"
-    },
-    "sap_supplier_id": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "event_type": {
+      "const": "supplier.sap-sync.completed.v1"
     },
     "version": {
       "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "supplier_id",
+        "business_partner_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "supplier_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "business_partner_id": {
+          "type": "string"
+        },
+        "sap_supplier_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "additionalProperties": false
 }

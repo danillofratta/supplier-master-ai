@@ -1,14 +1,20 @@
 services:
   postgres:
     image: postgres:16
+    container_name: supplier-master-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: supplier_master
+      POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d supplier_master"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d postgres"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

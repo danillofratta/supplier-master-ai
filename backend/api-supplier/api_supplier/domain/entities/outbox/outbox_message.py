@@ -22,9 +22,10 @@ class OutboxMessage:
         *,
         event_type: str,
         payload: str,
+        message_id: UUID | None = None,
     ) -> "OutboxMessage":
         return cls(
-            message_id=uuid4(),
+            message_id=message_id or uuid4(),
             event_type=event_type,
             payload=payload,
         )
@@ -33,4 +34,4 @@ class OutboxMessage:
         self.processed_at = utc_now()
 
     def register_attempt(self) -> None:
-        self.attempts += 1
+        self.attempts = (self.attempts or 0) + 1

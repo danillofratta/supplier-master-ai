@@ -22,9 +22,13 @@ from consumer_sap.infrastructure.messaging.sqs_message_mapper import (
 from consumer_sap.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SqlAlchemySapIntegrationUnitOfWork,
 )
+from consumer_sap.shared.logging import configure_logging
+from consumer_sap.shared.observability import configure_tracing
 
 
 load_dotenv()
+logger = configure_logging("consumer-sap")
+tracer = configure_tracing("consumer-sap")
 
 
 async def run() -> None:
@@ -37,13 +41,10 @@ async def run() -> None:
         expire_on_commit=False,
     )
 
-    uow = SqlAlchemySapIntegrationUnitOfWork(factory)
-
-    # This project intentionally uses a fake SAP adapter until a real
-    # SAP/OData environment is available. The handler depends only on
-    # the SapGateway protocol, so the adapter can be replaced later.
     handler = SyncSupplierHandler(
-        unit_of_work=uow,
+        unit_of_work=SqlAlchemySapIntegrationUnitOfWork(
+            factory
+        ),
         sap_gateway=FakeSapGateway(),
     )
 
@@ -54,45 +55,104 @@ async def run() -> None:
         region_name=os.environ["AWS_REGION"],
     )
 
-    print("consumer-sap started (SAP adapter: fake)")
+    logger.info(
+        "consumer started",
+        extra={"sap_adapter": "fake"},
+    )
 
     try:
         while True:
             messages = await consumer.receive_messages()
 
             for message in messages:
+                receive_count = (
+                    message.get("Attributes", {})
+                    .get("ApproximateReceiveCount")
+                )
+
                 try:
                     command = (
                         SqsMessageMapper
                         .to_sync_supplier_command(message)
                     )
 
-                    result = await handler.handle(command)
-
-                    # ACK only after the local DB transaction commits.
-                    # Duplicate deliveries are safe because of Inbox.
-                    await consumer.delete_message(
-                        message["ReceiptHandle"]
-                    )
-
-                    if result is None:
-                        print(
-                            "Duplicate SAP request ignored:",
-                            command.message_id,
+                    with tracer.start_as_current_span(
+                        "process supplier.sap-sync.requested.v1"
+                    ) as span:
+                        span.set_attribute(
+                            "messaging.message.id",
+                            str(command.message_id),
                         )
-                    else:
-                        print(
-                            "SAP request completed:",
-                            command.message_id,
-                            result.business_partner_id,
+                        span.set_attribute(
+                            "app.correlation_id",
+                            str(command.correlation_id),
                         )
-                except Exception as exc:
-                    # Do not delete. SQS visibility timeout and DLQ policy
-                    # will cause a retry / eventual dead-lettering.
-                    print(
-                        "SAP request processing failed:",
-                        message.get("MessageId"),
-                        str(exc),
+                        span.set_attribute(
+                            "app.workflow_id",
+                            str(command.workflow_id),
+                        )
+                        span.set_attribute(
+                            "app.supplier_id",
+                            str(command.supplier_id),
+                        )
+
+                        logger.info(
+                            "SAP sync request received",
+                            extra={
+                                "message_id": str(
+                                    command.message_id
+                                ),
+                                "correlation_id": str(
+                                    command.correlation_id
+                                ),
+                                "workflow_id": str(
+                                    command.workflow_id
+                                ),
+                                "supplier_id": str(
+                                    command.supplier_id
+                                ),
+                                "receive_count": receive_count,
+                            },
+                        )
+
+                        result = await handler.handle(command)
+
+                        await consumer.delete_message(
+                            message["ReceiptHandle"]
+                        )
+
+                        logger.info(
+                            "SAP sync request processed",
+                            extra={
+                                "message_id": str(
+                                    command.message_id
+                                ),
+                                "correlation_id": str(
+                                    command.correlation_id
+                                ),
+                                "workflow_id": str(
+                                    command.workflow_id
+                                ),
+                                "supplier_id": str(
+                                    command.supplier_id
+                                ),
+                                "duplicate": result is None,
+                                "business_partner_id": (
+                                    None
+                                    if result is None
+                                    else result.business_partner_id
+                                ),
+                            },
+                        )
+                except Exception:
+                    logger.exception(
+                        "SAP sync request failed",
+                        extra={
+                            "sqs_message_id": message.get(
+                                "MessageId"
+                            ),
+                            "receive_count": receive_count,
+                        },
                     )
     finally:
         await engine.dispose()

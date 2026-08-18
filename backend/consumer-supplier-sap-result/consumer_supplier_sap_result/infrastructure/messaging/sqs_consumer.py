@@ -30,8 +30,10 @@ class SqsConsumer:
             WaitTimeSeconds=wait_time_seconds,
             VisibilityTimeout=visibility_timeout,
             MessageAttributeNames=["All"],
+            MessageSystemAttributeNames=[
+                "ApproximateReceiveCount",
+            ],
         )
-
         return response.get("Messages", [])
 
     async def delete_message(

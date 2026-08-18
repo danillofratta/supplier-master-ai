@@ -1,13 +1,28 @@
-from consumer_sap.domain.entities.outbox_message import OutboxMessage
-from consumer_sap.domain.entities.sap_sync_operation import SapSyncOperation
-from consumer_sap.features.sync_supplier.command import SyncSupplierCommand
+from consumer_sap.domain.entities.outbox_message import (
+    OutboxMessage,
+)
+from consumer_sap.domain.entities.sap_sync_operation import (
+    SapSyncOperation,
+)
+from consumer_sap.features.sync_supplier.command import (
+    SyncSupplierCommand,
+)
 from consumer_sap.features.sync_supplier.contracts import (
     SAP_SYNC_COMPLETED_V1,
-    SapSyncCompletedDto,
+    build_sap_sync_completed_payload,
 )
-from consumer_sap.features.sync_supplier.result import SyncSupplierResult
-from consumer_sap.features.sync_supplier.sap_gateway import SapGateway
-from consumer_sap.shared.unit_of_work import SapIntegrationUnitOfWork
+from consumer_sap.features.sync_supplier.result import (
+    SyncSupplierResult,
+)
+from consumer_sap.features.sync_supplier.sap_gateway import (
+    SapGateway,
+)
+from consumer_sap.shared.messaging.integration_event import (
+    IntegrationEvent,
+)
+from consumer_sap.shared.unit_of_work import (
+    SapIntegrationUnitOfWork,
+)
 
 
 class SyncSupplierHandler:
@@ -23,7 +38,6 @@ class SyncSupplierHandler:
         self,
         command: SyncSupplierCommand,
     ) -> SyncSupplierResult | None:
-        # Short local transaction: persist intent/state before external call.
         async with self._uow as uow:
             if await uow.inbox.exists(command.message_id):
                 return None
@@ -35,6 +49,7 @@ class SyncSupplierHandler:
             if operation is None:
                 operation = SapSyncOperation.start(
                     message_id=command.message_id,
+                    correlation_id=command.correlation_id,
                     workflow_id=command.workflow_id,
                     supplier_id=command.supplier_id,
                     tax_id=command.tax_id,
@@ -45,7 +60,6 @@ class SyncSupplierHandler:
             await uow.operations.update(operation)
             await uow.commit()
 
-        # External call outside the PostgreSQL transaction.
         existing = await self._sap.find_by_tax_id(
             command.tax_id
         )
@@ -55,22 +69,25 @@ class SyncSupplierHandler:
             or await self._sap.create_supplier(command)
         )
 
-        completed = SapSyncCompletedDto.create(
-            workflow_id=command.workflow_id,
-            supplier_id=command.supplier_id,
-            business_partner_id=(
-                reference.business_partner_id
+        result_event = IntegrationEvent.create(
+            correlation_id=command.correlation_id,
+            event_type=SAP_SYNC_COMPLETED_V1,
+            payload=build_sap_sync_completed_payload(
+                workflow_id=command.workflow_id,
+                supplier_id=command.supplier_id,
+                business_partner_id=(
+                    reference.business_partner_id
+                ),
+                sap_supplier_id=reference.supplier_id,
             ),
-            sap_supplier_id=reference.supplier_id,
         )
 
         outbox_message = OutboxMessage.create(
-            event_type=SAP_SYNC_COMPLETED_V1,
-            payload=completed.to_json(),
+            message_id=result_event.message_id,
+            event_type=result_event.event_type,
+            payload=result_event.to_json(),
         )
 
-        # Atomic local completion:
-        # operation + inbox + outbox are committed together.
         async with self._uow as uow:
             operation = await uow.operations.get_by_message_id(
                 command.message_id
@@ -87,16 +104,11 @@ class SyncSupplierHandler:
             )
 
             await uow.operations.update(operation)
-
             await uow.inbox.add(
                 command.message_id,
                 "supplier.sap-sync.requested.v1",
             )
-
-            await uow.outbox_messages.add(
-                outbox_message
-            )
-
+            await uow.outbox_messages.add(outbox_message)
             await uow.commit()
 
         return SyncSupplierResult(

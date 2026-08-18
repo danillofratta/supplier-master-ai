@@ -134,10 +134,17 @@ async def test_approve_schedules_sap_sync_in_outbox() -> None:
     assert len(pending) == 1
     assert pending[0].event_type == SAP_SYNC_REQUESTED_V1
 
-    payload = json.loads(pending[0].payload)
-    assert payload["workflow_id"] == str(result.onboarding_workflow_id)
-    assert payload["supplier_id"] == str(supplier.supplier_id)
-    assert payload["tax_id"] == supplier.tax_id
+    event = json.loads(pending[0].payload)
+    assert event["message_id"] == str(pending[0].message_id)
+    assert event["event_type"] == SAP_SYNC_REQUESTED_V1
+    assert event["correlation_id"]
+    assert event["payload"]["workflow_id"] == str(
+        result.onboarding_workflow_id
+    )
+    assert event["payload"]["supplier_id"] == str(
+        supplier.supplier_id
+    )
+    assert event["payload"]["tax_id"] == supplier.tax_id
 
 
 @pytest.mark.asyncio

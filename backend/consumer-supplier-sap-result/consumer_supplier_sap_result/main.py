@@ -19,12 +19,27 @@ from consumer_supplier_sap_result.features.process_sap_result.processor import (
 from consumer_supplier_sap_result.infrastructure.messaging.sqs_consumer import (
     SqsConsumer,
 )
+from consumer_supplier_sap_result.infrastructure.messaging.sqs_message_mapper import (
+    SqsMessageMapper,
+)
 from consumer_supplier_sap_result.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SqlAlchemySupplierResultUnitOfWork,
+)
+from consumer_supplier_sap_result.shared.logging import (
+    configure_logging,
+)
+from consumer_supplier_sap_result.shared.observability import (
+    configure_tracing,
 )
 
 
 load_dotenv()
+logger = configure_logging(
+    "consumer-supplier-sap-result"
+)
+tracer = configure_tracing(
+    "consumer-supplier-sap-result"
+)
 
 
 async def run() -> None:
@@ -32,14 +47,12 @@ async def run() -> None:
         os.environ["SUPPLIER_DATABASE_URL"],
         pool_pre_ping=True,
     )
-    session_factory = async_sessionmaker(
+    factory = async_sessionmaker(
         engine,
         expire_on_commit=False,
     )
 
-    uow = SqlAlchemySupplierResultUnitOfWork(
-        session_factory
-    )
+    uow = SqlAlchemySupplierResultUnitOfWork(factory)
 
     processor = SapResultMessageProcessor(
         complete_handler=CompleteSapSyncHandler(uow),
@@ -53,31 +66,80 @@ async def run() -> None:
         region_name=os.environ["AWS_REGION"],
     )
 
-    print("consumer-supplier-sap-result started")
+    logger.info("consumer started")
 
     try:
         while True:
             messages = await consumer.receive_messages()
 
             for message in messages:
+                receive_count = (
+                    message.get("Attributes", {})
+                    .get("ApproximateReceiveCount")
+                )
                 try:
-                    await processor.process(message)
+                    body = SqsMessageMapper._parse(message)
 
-                    # ACK only after database commit/idempotency succeeds.
-                    await consumer.delete_message(
-                        message["ReceiptHandle"]
-                    )
+                    with tracer.start_as_current_span(
+                        "process SAP result"
+                    ) as span:
+                        span.set_attribute(
+                            "messaging.message.id",
+                            body["message_id"],
+                        )
+                        span.set_attribute(
+                            "app.correlation_id",
+                            body["correlation_id"],
+                        )
+                        span.set_attribute(
+                            "messaging.event_type",
+                            body["event_type"],
+                        )
 
-                    print(
-                        "SAP result processed:",
-                        message["MessageId"],
-                    )
-                except Exception as exc:
-                    # Do not delete. Visibility timeout + DLQ policy handle retry.
-                    print(
-                        "SAP result processing failed:",
-                        message.get("MessageId"),
-                        str(exc),
+                        logger.info(
+                            "SAP result received",
+                            extra={
+                                "message_id": body[
+                                    "message_id"
+                                ],
+                                "correlation_id": body[
+                                    "correlation_id"
+                                ],
+                                "event_type": body[
+                                    "event_type"
+                                ],
+                                "receive_count": receive_count,
+                            },
+                        )
+
+                        await processor.process(message)
+                        await consumer.delete_message(
+                            message["ReceiptHandle"]
+                        )
+
+                        logger.info(
+                            "SAP result processed",
+                            extra={
+                                "message_id": body[
+                                    "message_id"
+                                ],
+                                "correlation_id": body[
+                                    "correlation_id"
+                                ],
+                                "event_type": body[
+                                    "event_type"
+                                ],
+                            },
+                        )
+                except Exception:
+                    logger.exception(
+                        "SAP result processing failed",
+                        extra={
+                            "sqs_message_id": message.get(
+                                "MessageId"
+                            ),
+                            "receive_count": receive_count,
+                        },
                     )
     finally:
         await engine.dispose()
