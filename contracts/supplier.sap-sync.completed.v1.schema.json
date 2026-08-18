@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "supplier.sap-sync.completed.v1",
+  "type": "object",
+  "required": [
+    "event_id",
+    "workflow_id",
+    "supplier_id",
+    "business_partner_id",
+    "version"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "workflow_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "supplier_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "business_partner_id": {
+      "type": "string"
+    },
+    "sap_supplier_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "const": 1
+    }
+  }
+}

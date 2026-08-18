@@ -1,0 +1,27 @@
+from typing import Protocol
+from uuid import UUID
+
+from worker_sap_outbox.domain.entities.outbox_message import (
+    OutboxMessage,
+)
+
+
+class OutboxRepository(Protocol):
+    async def get_pending(
+        self,
+        *,
+        limit: int = 100,
+    ) -> tuple[OutboxMessage, ...]:
+        ...
+
+    async def get_by_id(
+        self,
+        message_id: UUID,
+    ) -> OutboxMessage | None:
+        ...
+
+    async def update(
+        self,
+        message: OutboxMessage,
+    ) -> None:
+        ...

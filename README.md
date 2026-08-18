@@ -1,61 +1,38 @@
 # Supplier Master AI
 
-FastAPI portfolio project for supplier onboarding, deterministic workflow control, Amazon Bedrock analysis, and enterprise integration patterns.
-
-## Architecture
+Microservice-oriented monorepo. Each deployable has its own Python package,
+dependencies and tests.
 
 ```text
-API request/response (Pydantic)
-        ↓
-Vertical slice command + handler
-        ↓
-Application ports and immutable results
-        ↓
-Domain entities and rules
-        ↓
-Infrastructure adapters (repository, Amazon Bedrock)
+backend/
+├── api-supplier/
+├── worker-supplier-outbox/
+├── consumer-sap/
+└── consumer-supplier-sap-result/
+
+contracts/
+docs/
 ```
 
-The API response model is used only at the HTTP boundary. The analysis handler works with `SupplierAnalysisResult`, while the Bedrock adapter validates untrusted model output with an infrastructure Pydantic model before mapping it to the application result.
+## Database ownership
 
-## Installation
+`api-supplier`, `worker-supplier-outbox`, and
+`consumer-supplier-sap-result` belong to the Supplier bounded context and
+operate on `supplier_db`.
 
-Run commands from the repository root.
+`consumer-sap` owns a separate `sap_integration_db`. It never reads or writes
+`Supplier` tables.
 
-### API without AWS SDK
+### supplier_db
+- suppliers
+- supplier_onboarding_workflow
+- outbox_messages
+- inbox_messages (for inbound integration results)
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .\backend
-uvicorn backend.app.main:app --reload
-```
+### sap_integration_db
+- inbox_messages
+- sap_sync_operations
+- outbox_messages
 
-The create-supplier endpoint and automated API tests do not require `boto3`.
-
-### API with Amazon Bedrock
-
-```powershell
-pip install -e ".\backend[ai]"
-```
-
-Configure `.env` using `backend/.env.example`, and configure AWS credentials through the standard AWS credential chain.
-
-### Development and tests
-
-```powershell
-pip install -e ".\backend[all]"
-pytest .\backend\tests -q
-```
-
-### Manual Bedrock smoke test
-
-```powershell
-python -m backend.scripts_test_bedrock_analysis
-```
-
-This command invokes the real provider and may incur AWS charges.
-
-## Composition root
-
-Dependencies are composed in `backend/app/bootstrap/dependencies.py`. The Bedrock adapter is imported lazily only when the analysis dependency is resolved. Therefore, importing and starting the API does not require `boto3`; invoking the analysis endpoint requires the `ai` extra and `BEDROCK_MODEL_ID`.
+The services communicate through versioned integration events, not shared
+domain entities or cross-service database access.

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supplier-master-ai-worker-sap-outbox"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.29",
+    "boto3>=1.35,<2.0",
+    "python-dotenv>=1.0,<2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["worker_sap_outbox*"]

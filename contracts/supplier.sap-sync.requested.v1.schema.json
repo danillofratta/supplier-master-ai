@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "supplier.sap-sync.requested.v1",
+  "type": "object",
+  "required": [
+    "event_id",
+    "workflow_id",
+    "supplier_id",
+    "name",
+    "email",
+    "phone",
+    "tax_id",
+    "address",
+    "occurred_at",
+    "version"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "workflow_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "supplier_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "tax_id": {
+      "type": "string"
+    },
+    "address": {
+      "type": "object",
+      "required": [
+        "street",
+        "city",
+        "state",
+        "zip_code",
+        "country"
+      ],
+      "properties": {
+        "street": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "zip_code": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        }
+      }
+    },
+    "occurred_at": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    }
+  }
+}
