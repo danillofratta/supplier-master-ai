@@ -69,3 +69,19 @@ business workflow.
 
 See `database/README.md` for PostgreSQL setup and
 `docs/RUN_MESSAGING_FLOW.md` for the runtime flow.
+
+## API Gateway
+
+The frontend talks only to `api-gateway` on port `8000`. The gateway routes Supplier requests to `api-supplier` on port `8001`, creates or propagates `X-Correlation-ID`, forwards `Authorization`, applies downstream timeouts, exposes readiness/liveness checks and centralizes frontend CORS.
+
+Public Supplier routes:
+
+```text
+GET  /api/v1/suppliers
+POST /api/v1/suppliers
+GET  /api/v1/suppliers/{supplier_id}
+POST /api/v1/suppliers/{supplier_id}/analysis
+GET  /api/v1/suppliers/{supplier_id}/onboarding
+```
+
+See `backend/api-gateway/README.md` for local execution.
