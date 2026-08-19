@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_supplier.domain.entities.supplier_onboarding_workflow import (
@@ -61,6 +62,33 @@ class PostgreSQLSupplierOnboardingWorkflowRepository:
         model.failure_reason = workflow.failure_reason
         model.updated_at = workflow.updated_at
 
+    async def get_latest_by_supplier_id(
+        self,
+        supplier_id: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        result = await self._session.execute(
+            select(
+                SupplierOnboardingWorkflowModel
+            )
+            .where(
+                SupplierOnboardingWorkflowModel.supplier_id
+                == supplier_id
+            )
+            .order_by(
+                SupplierOnboardingWorkflowModel.created_at.desc()
+            )
+            .limit(1)
+        )
+
+        model = result.scalar_one_or_none()
+
+        if model is None:
+            return None
+
+        return SupplierOnboardingWorkflowMapper.to_domain(
+            model
+        )        
+
 
 class InMemorySupplierOnboardingWorkflowRepository:
     def __init__(self) -> None:
@@ -83,3 +111,21 @@ class InMemorySupplierOnboardingWorkflowRepository:
         workflow: SupplierOnboardingWorkflow,
     ) -> None:
         self._workflows[workflow.workflow_id] = workflow
+
+    async def get_latest_by_supplier_id(
+        self,
+        supplier_id: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        workflows = [
+            workflow
+            for workflow in self._workflows.values()
+            if workflow.supplier_id == supplier_id
+        ]
+
+        if not workflows:
+            return None
+
+        return max(
+            workflows,
+            key=lambda workflow: workflow.created_at,
+        )        

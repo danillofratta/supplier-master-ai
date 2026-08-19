@@ -24,3 +24,9 @@ class SupplierOnboardingWorkflowRepository(Protocol):
         workflow: SupplierOnboardingWorkflow,
     ) -> None:
         ...
+
+    async def get_latest_by_supplier_id(
+        self,
+        supplier_id: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        ...        

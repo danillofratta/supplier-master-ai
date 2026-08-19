@@ -13,23 +13,44 @@ from api_supplier.infrastructure.persistence.sqlalchemy.models.supplier_model im
 
 
 class PostgreSQLSupplierRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+    ) -> None:
         self._session = session
 
-    async def add(self, supplier: Supplier) -> None:
-        self._session.add(SupplierMapper.to_model(supplier))
+    async def add(
+        self,
+        supplier: Supplier,
+    ) -> None:
+        self._session.add(
+            SupplierMapper.to_model(supplier)
+        )
 
-    async def update(self, supplier: Supplier) -> None:
-        model = await self._session.get(SupplierModel, supplier.supplier_id)
+    async def update(
+        self,
+        supplier: Supplier,
+    ) -> None:
+        model = await self._session.get(
+            SupplierModel,
+            supplier.supplier_id,
+        )
+
         if model is None:
-            self._session.add(SupplierMapper.to_model(supplier))
+            self._session.add(
+                SupplierMapper.to_model(supplier)
+            )
             return
 
         model.name = supplier.name
         model.email = supplier.email
         model.phone = supplier.phone
         model.tax_id = supplier.tax_id
-        model.normalized_tax_id = SupplierMapper.normalize_tax_id(supplier.tax_id)
+        model.normalized_tax_id = (
+            SupplierMapper.normalize_tax_id(
+                supplier.tax_id
+            )
+        )
         model.status = supplier.status.value
         model.street = supplier.address.street
         model.city = supplier.address.city
@@ -38,54 +59,118 @@ class PostgreSQLSupplierRepository:
         model.country = supplier.address.country
         model.updated_at = supplier.updated_at
 
-    async def get_by_id(self, supplier_id: UUID) -> Supplier | None:
-        model = await self._session.get(SupplierModel, supplier_id)
-        return None if model is None else SupplierMapper.to_domain(model)
+    async def get_by_id(
+        self,
+        supplier_id: UUID,
+    ) -> Supplier | None:
+        model = await self._session.get(
+            SupplierModel,
+            supplier_id,
+        )
+        return (
+            None
+            if model is None
+            else SupplierMapper.to_domain(model)
+        )
 
-    async def get_all(self) -> list[Supplier]:
-        result = await self._session.execute(select(SupplierModel))
-        return [SupplierMapper.to_domain(model) for model in result.scalars().all()]
+    async def get_by_tax_id(
+        self,
+        tax_id: str,
+    ) -> Supplier | None:
+        normalized_tax_id = (
+            SupplierMapper.normalize_tax_id(tax_id)
+        )
 
-    async def get_by_tax_id(self, tax_id: str) -> Supplier | None:
-        normalized_tax_id = SupplierMapper.normalize_tax_id(tax_id)
         result = await self._session.execute(
             select(SupplierModel).where(
-                SupplierModel.normalized_tax_id == normalized_tax_id
+                SupplierModel.normalized_tax_id
+                == normalized_tax_id
             )
         )
         model = result.scalar_one_or_none()
-        return None if model is None else SupplierMapper.to_domain(model)
+
+        return (
+            None
+            if model is None
+            else SupplierMapper.to_domain(model)
+        )
+
+    async def list_all(
+        self,
+    ) -> tuple[Supplier, ...]:
+        result = await self._session.execute(
+            select(SupplierModel).order_by(
+                SupplierModel.created_at.desc()
+            )
+        )
+
+        return tuple(
+            SupplierMapper.to_domain(model)
+            for model in result.scalars().all()
+        )
 
 
 class InMemorySupplierRepository:
     def __init__(self) -> None:
         self._suppliers: dict[UUID, Supplier] = {}
 
-    async def add(self, supplier: Supplier) -> None:
-        self._suppliers[supplier.supplier_id] = supplier
+    async def add(
+        self,
+        supplier: Supplier,
+    ) -> None:
+        self._suppliers[
+            supplier.supplier_id
+        ] = supplier
 
-    async def update(self, supplier: Supplier) -> None:
-        self._suppliers[supplier.supplier_id] = supplier
+    async def update(
+        self,
+        supplier: Supplier,
+    ) -> None:
+        self._suppliers[
+            supplier.supplier_id
+        ] = supplier
 
-    async def get_by_id(self, supplier_id: UUID) -> Supplier | None:
+    async def get_by_id(
+        self,
+        supplier_id: UUID,
+    ) -> Supplier | None:
         return self._suppliers.get(supplier_id)
 
-    async def get_all(self) -> list[Supplier]:
-        return list(self._suppliers.values())
+    async def get_by_tax_id(
+        self,
+        tax_id: str,
+    ) -> Supplier | None:
+        normalized_tax_id = self._normalize_tax_id(
+            tax_id
+        )
 
-    async def get_by_tax_id(self, tax_id: str) -> Supplier | None:
-        normalized_tax_id = self._normalize_tax_id(tax_id)
         return next(
             (
                 supplier
                 for supplier in self._suppliers.values()
-                if self._normalize_tax_id(supplier.tax_id) == normalized_tax_id
+                if self._normalize_tax_id(
+                    supplier.tax_id
+                )
+                == normalized_tax_id
             ),
             None,
         )
 
+    async def list_all(
+        self,
+    ) -> tuple[Supplier, ...]:
+        return tuple(
+            sorted(
+                self._suppliers.values(),
+                key=lambda supplier: supplier.created_at,
+                reverse=True,
+            )
+        )
+
     @staticmethod
-    def _normalize_tax_id(tax_id: str) -> str:
+    def _normalize_tax_id(
+        tax_id: str,
+    ) -> str:
         return "".join(
             character.lower()
             for character in tax_id

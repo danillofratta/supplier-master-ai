@@ -12,6 +12,16 @@ from api_supplier.features.suppliers.analyze.handler import AnalyzeSupplierHandl
 from api_supplier.features.suppliers.analyze.policy_retriever import PolicyRetriever
 from api_supplier.features.suppliers.analyze.supplier_analyzer import SupplierAnalyzer
 from api_supplier.features.suppliers.create.handler import CreateSupplierHandler
+
+from api_supplier.features.suppliers.get_by_id.handler import (
+    GetSupplierByIdHandler,
+)
+from api_supplier.features.suppliers.get_list.handler import (
+    ListSuppliersHandler,
+)
+from api_supplier.features.suppliers.get_onboarding_status.handler import (
+    GetSupplierOnboardingHandler,
+)
 from api_supplier.infrastructure.persistence.sqlalchemy.database import Database
 from api_supplier.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SqlAlchemySupplierUnitOfWork,
@@ -193,8 +203,25 @@ def get_analyze_supplier_handler(
         policy_retriever=policy_retriever,
     )
 
+def get_list_suppliers_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> ListSuppliersHandler:
+    return ListSuppliersHandler(unit_of_work)
+
 
 def get_create_supplier_handler(
     unit_of_work: SupplierUnitOfWorkDependency,
 ) -> CreateSupplierHandler:
     return CreateSupplierHandler(unit_of_work)
+
+
+def get_supplier_by_id_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> GetSupplierByIdHandler:
+    return GetSupplierByIdHandler(unit_of_work)
+
+
+def get_supplier_onboarding_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> GetSupplierOnboardingHandler:
+    return GetSupplierOnboardingHandler(unit_of_work)
