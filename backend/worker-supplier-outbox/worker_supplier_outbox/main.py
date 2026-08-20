@@ -25,6 +25,8 @@ from worker_supplier_outbox.shared.logging import (
 )
 from worker_supplier_outbox.shared.observability import (
     configure_tracing,
+    instrument_botocore,
+    instrument_sqlalchemy,
 )
 
 
@@ -47,6 +49,7 @@ def require_env(name: str) -> str:
 load_environment()
 logger = configure_logging("worker-supplier-outbox")
 tracer = configure_tracing("worker-supplier-outbox")
+instrument_botocore()
 
 
 async def run() -> None:
@@ -54,6 +57,7 @@ async def run() -> None:
         require_env("SUPPLIER_DATABASE_URL"),
         pool_pre_ping=True,
     )
+    instrument_sqlalchemy(engine)
     factory = async_sessionmaker(
         engine,
         expire_on_commit=False,

@@ -3,6 +3,11 @@ import json
 
 import boto3
 
+from worker_supplier_outbox.shared.observability import (
+    inject_sqs_trace_attributes,
+)
+
+
 
 class SqsMessagePublisher:
     def __init__(
@@ -64,6 +69,12 @@ class SqsMessagePublisher:
                 }
         except (TypeError, ValueError):
             pass
+
+        attributes = (
+            inject_sqs_trace_attributes(
+                attributes
+            )
+        )
 
         await asyncio.to_thread(
             self._client.send_message,

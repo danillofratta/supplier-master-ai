@@ -1,3 +1,5 @@
+from api_supplier.shared.observability import instrument_sqlalchemy
+
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -11,6 +13,7 @@ class Database:
             database_url,
             pool_pre_ping=True,
         )
+        instrument_sqlalchemy(self.engine)
         self.session_factory = async_sessionmaker(
             bind=self.engine,
             class_=AsyncSession,

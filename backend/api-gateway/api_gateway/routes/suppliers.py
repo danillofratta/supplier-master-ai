@@ -1,3 +1,5 @@
+import logging
+from time import perf_counter
 from uuid import UUID
 
 import httpx
@@ -14,6 +16,8 @@ from api_gateway.shared.proxy import (
     to_gateway_response,
 )
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/suppliers",
@@ -39,10 +43,25 @@ async def _proxy(
     method: str,
     upstream_path: str,
 ):
+    started = perf_counter()
+
     body = (
         await request.body()
-        if method in {"POST", "PUT", "PATCH"}
+        if method in {
+            "POST",
+            "PUT",
+            "PATCH",
+        }
         else None
+    )
+
+    logger.info(
+        "downstream request started",
+        extra={
+            "component": "SupplierApiClient",
+            "http_method": method,
+            "downstream_path": upstream_path,
+        },
     )
 
     try:
@@ -69,7 +88,47 @@ async def _proxy(
         httpx.TimeoutException,
         httpx.RequestError,
     ) as exc:
+        logger.exception(
+            "downstream request failed",
+            extra={
+                "component": (
+                    "SupplierApiClient"
+                ),
+                "http_method": method,
+                "downstream_path": (
+                    upstream_path
+                ),
+                "duration_ms": round(
+                    (
+                        perf_counter()
+                        - started
+                    )
+                    * 1000,
+                    2,
+                ),
+            },
+        )
         raise_gateway_error(exc)
+
+    logger.info(
+        "downstream request completed",
+        extra={
+            "component": "SupplierApiClient",
+            "http_method": method,
+            "downstream_path": upstream_path,
+            "downstream_status_code": (
+                upstream.status_code
+            ),
+            "duration_ms": round(
+                (
+                    perf_counter()
+                    - started
+                )
+                * 1000,
+                2,
+            ),
+        },
+    )
 
     return to_gateway_response(upstream)
 

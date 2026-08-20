@@ -52,6 +52,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: InvalidSupplierAnalysisResponseError,
     ) -> JSONResponse:
+        logger.exception(
+            "AI provider returned an invalid response",
+            exc_info=(type(exc), exc, exc.__traceback__),
+            extra={
+                "component": "SupplierAnalysis",
+                "http_path": request.url.path,
+            },
+        )
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={
@@ -65,6 +73,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: SupplierAnalysisProviderError,
     ) -> JSONResponse:
+        logger.exception(
+            "AI analysis provider unavailable",
+            exc_info=(type(exc), exc, exc.__traceback__),
+            extra={
+                "component": "SupplierAnalysis",
+                "http_path": request.url.path,
+            },
+        )
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
@@ -109,7 +125,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             "Unexpected error while processing %s %s",
             request.method,
             request.url.path,
-            exc_info=exc,
+            exc_info=(type(exc), exc, exc.__traceback__),
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

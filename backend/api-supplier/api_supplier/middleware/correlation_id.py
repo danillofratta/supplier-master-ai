@@ -5,7 +5,7 @@ from starlette.middleware.base import (
 )
 from starlette.requests import Request
 
-from api_gateway.shared.observability import (
+from api_supplier.shared.observability import (
     reset_correlation_id,
     set_correlation_id,
 )
@@ -43,7 +43,6 @@ class CorrelationIdMiddleware(
         request.state.correlation_id = (
             correlation_id
         )
-
         token = set_correlation_id(
             correlation_id
         )

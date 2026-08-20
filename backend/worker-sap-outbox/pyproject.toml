@@ -22,5 +22,7 @@ observability = [
     "opentelemetry-api>=1.28,<2.0",
     "opentelemetry-sdk>=1.28,<2.0",
     "opentelemetry-exporter-otlp-proto-http>=1.28,<2.0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.49b0,<1.0",
+    "opentelemetry-instrumentation-botocore>=0.49b0,<1.0",
 ]
 

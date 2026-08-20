@@ -15,6 +15,7 @@ from api_gateway.infrastructure.http.supplier_api_client import (
 from api_gateway.middleware.correlation_id import (
     CorrelationIdMiddleware,
 )
+from api_gateway.middleware.request_logging import RequestLoggingMiddleware
 from api_gateway.routes.health import (
     router as health_router,
 )
@@ -22,8 +23,21 @@ from api_gateway.routes.suppliers import (
     router as suppliers_router,
 )
 
+from api_gateway.shared.logging import (
+    configure_logging,
+)
+from api_gateway.shared.observability import (
+    configure_tracing,
+    instrument_fastapi,
+    instrument_httpx,
+)
+
 
 load_dotenv()
+
+logger = configure_logging("api-gateway")
+tracer = configure_tracing("api-gateway")
+instrument_httpx()
 
 
 @asynccontextmanager
@@ -76,9 +90,12 @@ def create_app() -> FastAPI:
         ],
     )
 
+    app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(
         CorrelationIdMiddleware
     )
+
+    instrument_fastapi(app)
 
     app.include_router(health_router)
     app.include_router(suppliers_router)
