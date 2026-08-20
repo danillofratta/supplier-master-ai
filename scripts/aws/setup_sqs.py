@@ -2,6 +2,7 @@ import json
 import os
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 REGION = os.getenv("AWS_REGION", "us-east-2")
@@ -31,20 +32,34 @@ RESULT_DLQ = os.getenv(
     "supplier-sap-sync-results-dlq",
 )
 
+QUEUE_ATTRIBUTES = {
+    "ReceiveMessageWaitTimeSeconds": "20",
+    "VisibilityTimeout": "60",
+    "MessageRetentionPeriod": "345600",
+}
+
 
 def ensure_queue(
     sqs,
     name: str,
 ) -> str:
-    response = sqs.create_queue(
-        QueueName=name,
-        Attributes={
-            "ReceiveMessageWaitTimeSeconds": "20",
-            "VisibilityTimeout": "60",
-            "MessageRetentionPeriod": "345600",
-        },
+    try:
+        response = sqs.create_queue(
+            QueueName=name,
+            Attributes=QUEUE_ATTRIBUTES,
+        )
+        return response["QueueUrl"]
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code")
+        if error_code != "QueueAlreadyExists":
+            raise
+
+    queue_url = sqs.get_queue_url(QueueName=name)["QueueUrl"]
+    sqs.set_queue_attributes(
+        QueueUrl=queue_url,
+        Attributes=QUEUE_ATTRIBUTES,
     )
-    return response["QueueUrl"]
+    return queue_url
 
 
 def queue_arn(

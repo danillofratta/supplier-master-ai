@@ -85,3 +85,25 @@ GET  /api/v1/suppliers/{supplier_id}/onboarding
 ```
 
 See `backend/api-gateway/README.md` for local execution.
+
+
+## Frontend
+
+The React + TypeScript frontend is in `frontend/` and communicates only with
+the API Gateway.
+
+```cmd
+cd frontend
+copy .env.example .env
+npm install
+npm run dev
+```
+
+Default URLs:
+
+- Frontend: `http://localhost:5173`
+- API Gateway: `http://localhost:8000`
+- Supplier API: `http://localhost:8001`
+
+The UI currently includes Dashboard, Supplier List, Supplier Details,
+Onboarding Timeline, AI Analysis and Create Supplier.

@@ -33,13 +33,13 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
 
-    try:
-        from opentelemetry.instrumentation.fastapi import (
-            FastAPIInstrumentor,
-        )
-        FastAPIInstrumentor.instrument_app(app)
-    except ImportError:
-        pass
+    # try:
+    #     from opentelemetry.instrumentation.fastapi import (
+    #         FastAPIInstrumentor,
+    #     )
+    #     FastAPIInstrumentor.instrument_app(app)
+    # except ImportError:
+    #     pass
 
     register_exception_handlers(app)
     app.include_router(create_supplier_router)

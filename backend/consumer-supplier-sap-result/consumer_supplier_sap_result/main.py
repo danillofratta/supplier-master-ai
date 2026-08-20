@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
@@ -33,7 +34,23 @@ from consumer_supplier_sap_result.shared.observability import (
 )
 
 
-load_dotenv()
+def load_environment() -> None:
+    service_root = Path(__file__).resolve().parent.parent
+    load_dotenv(service_root / ".env")
+    load_dotenv(service_root / ".env.example")
+
+
+def require_env(name: str) -> str:
+    value = os.getenv(name)
+    if value:
+        return value
+    raise RuntimeError(
+        f"Missing required environment variable '{name}'. "
+        "Create a .env file or populate the service .env.example values."
+    )
+
+
+load_environment()
 logger = configure_logging(
     "consumer-supplier-sap-result"
 )
@@ -44,7 +61,7 @@ tracer = configure_tracing(
 
 async def run() -> None:
     engine = create_async_engine(
-        os.environ["SUPPLIER_DATABASE_URL"],
+        require_env("SUPPLIER_DATABASE_URL"),
         pool_pre_ping=True,
     )
     factory = async_sessionmaker(
@@ -60,10 +77,14 @@ async def run() -> None:
     )
 
     consumer = SqsConsumer(
-        queue_url=os.environ[
+        queue_url=os.getenv(
             "SQS_SAP_RESULT_QUEUE_URL"
-        ],
-        region_name=os.environ["AWS_REGION"],
+        ),
+        queue_name=os.getenv(
+            "SQS_SAP_RESULT_QUEUE_NAME",
+            "supplier-sap-sync-results",
+        ),
+        region_name=require_env("AWS_REGION"),
     )
 
     logger.info("consumer started")

@@ -31,9 +31,11 @@ class AnalyzeSupplierHandler:
         async with self._unit_of_work as uow:
             supplier = await uow.suppliers.get_by_id(command.supplier_id)
 
+        print(f">>> supplier: {supplier} <<<")
         if supplier is None:
             raise SupplierNotFoundError(command.supplier_id)
 
+        print(f">>> supplier ok: {supplier} <<<")
         retrieval_query = self._build_retrieval_query(supplier)
         policies = await self._policy_retriever.retrieve(
             retrieval_query,

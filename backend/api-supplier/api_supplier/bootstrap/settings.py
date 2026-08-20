@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     bedrock_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     bedrock_max_tokens: int = Field(default=1000, gt=0)
 
-    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/supplier_db"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/supplier_db"
 
     opensearch_endpoint: str = "https://gt0dn4qasscpdxfaxxu6.aoss.us-east-2.on.aws"
     opensearch_index_name: str = "supplier-policies"
