@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/supplier_db"
 
-    opensearch_endpoint: str = "https://gt0dn4qasscpdxfaxxu6.aoss.us-east-2.on.aws"
+    opensearch_endpoint: str | None = None
     opensearch_index_name: str = "supplier-policies"
     opensearch_service: str = "aoss"
 

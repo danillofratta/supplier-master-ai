@@ -6,7 +6,12 @@ interface Props {
   onboarding: SupplierOnboarding;
 }
 
-const STEPS = [
+interface TimelineStep {
+  key: string;
+  title: string;
+}
+
+const STEPS: TimelineStep[] = [
   {
     key: "pending",
     title: "Workflow created",
@@ -29,17 +34,16 @@ const STEPS = [
   },
 ];
 
-function indexForStatus(status: string) {
+function indexForStatus(status: string): number {
   if (status === "rejected" || status === "failed") {
     return 2;
   }
 
-  return Math.max(
-    0,
-    STEPS.findIndex(
-      (step) => step.key === status
-    )
+  const index = STEPS.findIndex(
+    (step) => step.key === status
   );
+
+  return index >= 0 ? index : 0;
 }
 
 export function OnboardingTimeline({
@@ -48,26 +52,45 @@ export function OnboardingTimeline({
   const currentIndex = indexForStatus(
     onboarding.status
   );
+  const usedHumanReview = Boolean(
+    onboarding.service_now_ticket_id
+  );
 
   return (
     <div className="timeline">
       {STEPS.map((step, index) => {
+        const humanReviewSkipped =
+          step.key === "waiting_human_review" &&
+          !usedHumanReview &&
+          ["syncing_to_sap", "completed"].includes(
+            onboarding.status
+          );
+
         const complete =
-          index < currentIndex ||
-          onboarding.status === "completed";
+          !humanReviewSkipped &&
+          (index < currentIndex ||
+            onboarding.status === "completed");
+
         const current =
           index === currentIndex &&
-          onboarding.status !== "completed";
+          onboarding.status !== "completed" &&
+          !humanReviewSkipped;
 
         return (
           <div
             key={step.key}
             className={`timeline-step ${
               complete ? "complete" : ""
-            } ${current ? "current" : ""}`}
+            } ${current ? "current" : ""} ${
+              humanReviewSkipped ? "skipped" : ""
+            }`}
           >
             <div className="timeline-marker">
-              {complete ? "✓" : index + 1}
+              {complete
+                ? "✓"
+                : humanReviewSkipped
+                  ? "—"
+                  : index + 1}
             </div>
 
             <div>
@@ -76,6 +99,12 @@ export function OnboardingTimeline({
               {current && (
                 <small>
                   Current workflow state
+                </small>
+              )}
+
+              {humanReviewSkipped && (
+                <small>
+                  Skipped by the automated decision
                 </small>
               )}
             </div>

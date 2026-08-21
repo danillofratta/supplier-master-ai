@@ -37,6 +37,7 @@ class PostgreSQLWorkflowRepository:
                 model.sap_business_partner_id
             ),
             failure_reason=model.failure_reason,
+            updated_at=model.updated_at,
         )
 
     async def update(
@@ -58,6 +59,7 @@ class PostgreSQLWorkflowRepository:
             workflow.sap_business_partner_id
         )
         model.failure_reason = workflow.failure_reason
+        model.updated_at = workflow.updated_at
 
 
 class PostgreSQLInboxRepository:

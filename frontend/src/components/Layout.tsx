@@ -38,6 +38,16 @@ export function Layout() {
           </NavLink>
 
           <NavLink
+            to="/policies/ingest"
+            className={({ isActive }) =>
+              isActive ? "active" : ""
+            }
+          >
+            <span>◇</span>
+            Policy Ingest
+          </NavLink>
+
+          <NavLink
             to="/suppliers/new"
             className={({ isActive }) =>
               isActive ? "active" : ""

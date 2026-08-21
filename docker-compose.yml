@@ -1,25 +1,170 @@
+name: supplier-master-ai
+
 services:
   postgres:
-    image: postgres:16
-    container_name: supplier-master-postgres
-    restart: unless-stopped
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
+    volumes:
+      - supplier-postgres:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d supplier_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  api-supplier:
+    build:
+      context: ./backend/api-supplier
+    env_file:
+      - ./backend/api-supplier/.env
+      - ./.env.docker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/supplier_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    ports:
+      - "8001:8001"
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "pg_isready -U postgres -d postgres"
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)",
         ]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+    environment:
+      SUPPLIER_API_URL: http://api-supplier:8001
+      SUPPLIER_API_TIMEOUT_SECONDS: 60
+      CORS_ORIGINS: http://localhost:5173
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      api-supplier:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  worker-supplier-outbox:
+    build:
+      context: ./backend/worker-supplier-outbox
+    env_file:
+      - ./.env.docker
+    environment:
+      SUPPLIER_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/supplier_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  consumer-sap:
+    build:
+      context: ./backend/consumer-sap
+    env_file:
+      - ./.env.docker
+    environment:
+      SAP_INTEGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sap_integration_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  worker-sap-outbox:
+    build:
+      context: ./backend/worker-sap-outbox
+    env_file:
+      - ./.env.docker
+    environment:
+      SAP_INTEGRATION_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sap_integration_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  consumer-supplier-sap-result:
+    build:
+      context: ./backend/consumer-supplier-sap-result
+    env_file:
+      - ./.env.docker
+    environment:
+      SUPPLIER_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/supplier_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000/api
+    ports:
+      - "5173:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
 
 volumes:
-  postgres_data:
+  supplier-postgres:

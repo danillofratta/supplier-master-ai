@@ -15,17 +15,33 @@ import type {
 import {
   StatusBadge,
 } from "../components/StatusBadge";
+import { getApiErrorMessage } from "../api/apiError";
 
 export function DashboardPage() {
   const [suppliers, setSuppliers] = useState<
     SupplierListItem[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getSuppliers()
-      .then(setSuppliers)
-      .finally(() => setLoading(false));
+    async function load() {
+      try {
+        setError(null);
+        setSuppliers(await getSuppliers());
+      } catch (error: unknown) {
+        setError(
+          getApiErrorMessage(
+            error,
+            "Unable to load the dashboard."
+          )
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
   }, []);
 
   const summary = useMemo(() => {
@@ -71,6 +87,12 @@ export function DashboardPage() {
           + New Supplier
         </Link>
       </div>
+
+      {error && (
+        <div className="callout callout-error">
+          {error}
+        </div>
+      )}
 
       <div className="metric-grid">
         <div className="metric-card">

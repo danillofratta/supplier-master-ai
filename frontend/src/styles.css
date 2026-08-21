@@ -722,3 +722,22 @@ code {
     max-width: none;
   }
 }
+
+.action-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.review-actions { margin: 18px 0; padding: 16px; border: 1px solid rgba(245, 158, 11, .35); border-radius: 12px; background: rgba(245, 158, 11, .08); display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.review-actions p { margin: 4px 0 0; color: var(--muted, #94a3b8); }
+.policy-form { display: grid; gap: 20px; }
+.policy-form label { display: grid; gap: 8px; font-weight: 600; }
+.policy-form input, .policy-form textarea { width: 100%; box-sizing: border-box; border: 1px solid rgba(148,163,184,.25); background: rgba(15,23,42,.7); color: inherit; border-radius: 10px; padding: 12px; font: inherit; }
+.policy-form textarea { resize: vertical; line-height: 1.55; }
+.policy-content { display: grid; gap: 8px; }
+.callout-success { border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.08); }
+@media (max-width: 760px) { .review-actions { align-items: stretch; flex-direction: column; } }
+
+.timeline-step.skipped {
+  opacity: 0.55;
+}
+
+.timeline-step.skipped .timeline-marker {
+  border-style: dashed;
+}

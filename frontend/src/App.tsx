@@ -18,6 +18,7 @@ import {
 import {
   SuppliersPage,
 } from "./pages/SuppliersPage";
+import { IngestPolicyPage } from "./pages/IngestPolicyPage";
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
               <CreateSupplierPage />
             }
           />
+          <Route path="/policies/ingest" element={<IngestPolicyPage />} />
           <Route
             path="/suppliers/:supplierId"
             element={

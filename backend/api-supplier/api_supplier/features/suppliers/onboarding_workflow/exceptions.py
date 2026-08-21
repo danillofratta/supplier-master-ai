@@ -17,5 +17,29 @@ class SupplierOnboardingWorkflowNotFoundError(Exception):
         )
 
 
+class SupplierOnboardingForSupplierNotFoundError(Exception):
+    def __init__(self, supplier_id: UUID) -> None:
+        self.supplier_id = supplier_id
+        super().__init__(
+            f"No onboarding workflow was found for supplier '{supplier_id}'."
+        )
+
+
+class SupplierOnboardingAlreadyStartedError(Exception):
+    def __init__(
+        self,
+        supplier_id: UUID,
+        workflow_id: UUID,
+        status: str,
+    ) -> None:
+        self.supplier_id = supplier_id
+        self.workflow_id = workflow_id
+        self.status = status
+        super().__init__(
+            "Supplier onboarding has already been started "
+            f"(workflow '{workflow_id}', status '{status}')."
+        )
+
+
 class InvalidSupplierOnboardingTransitionError(Exception):
     pass

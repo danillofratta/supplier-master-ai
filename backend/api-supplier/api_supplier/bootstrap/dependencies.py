@@ -26,9 +26,6 @@ from api_supplier.infrastructure.persistence.sqlalchemy.database import Database
 from api_supplier.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SqlAlchemySupplierUnitOfWork,
 )
-from api_supplier.infrastructure.retrieval.null_policy_retriever import (
-    NullPolicyRetriever,
-)
 from api_supplier.shared.unit_of_work import SupplierUnitOfWork
 
 
@@ -41,6 +38,19 @@ def get_database(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Database:
     return _build_database(settings.database_url)
+
+
+async def dispose_database(
+    settings: Settings,
+) -> None:
+    if _build_database.cache_info().currsize == 0:
+        return
+
+    database = _build_database(
+        settings.database_url
+    )
+    await database.dispose()
+    _build_database.cache_clear()
 
 
 def get_supplier_unit_of_work(
@@ -180,7 +190,9 @@ def get_policy_retriever(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PolicyRetriever:
     if not settings.opensearch_endpoint:
-        return NullPolicyRetriever()
+        raise SupplierAnalysisProviderError(
+            "OPENSEARCH_ENDPOINT is required to analyze suppliers with RAG."
+        )
 
     return _build_policy_retriever(
         settings.opensearch_endpoint,
@@ -225,3 +237,94 @@ def get_supplier_onboarding_handler(
     unit_of_work: SupplierUnitOfWorkDependency,
 ) -> GetSupplierOnboardingHandler:
     return GetSupplierOnboardingHandler(unit_of_work)
+
+# --- Policy ingestion -------------------------------------------------------
+from api_supplier.features.policies.ingest.handler import IngestPolicyHandler
+from api_supplier.infrastructure.retrieval.simple_document_chunker import SimpleDocumentChunker
+from api_supplier.infrastructure.retrieval.opensearch.policy_index import (
+    OpenSearchPolicyIndex,
+    OpenSearchPolicyIndexInitializer,
+)
+from api_supplier.features.suppliers.onboarding_workflow.handler import StartSupplierOnboardingWorkflowHandler
+from api_supplier.features.suppliers.onboarding_workflow.service import SupplierOnboardingWorkflowService
+from api_supplier.features.suppliers.request_review.handler import RequestSupplierReviewHandler
+from api_supplier.infrastructure.integrations.servicenow.fake_servicenow_gateway import FakeServiceNowGateway
+from api_supplier.features.suppliers.review_decision.handler import DecideSupplierReviewHandler
+
+
+@lru_cache
+def _build_servicenow_gateway() -> FakeServiceNowGateway:
+    return FakeServiceNowGateway()
+
+
+def get_request_supplier_review_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> RequestSupplierReviewHandler:
+    return RequestSupplierReviewHandler(
+        unit_of_work=unit_of_work,
+        servicenow_gateway=_build_servicenow_gateway(),
+    )
+
+
+def get_onboarding_workflow_service(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> SupplierOnboardingWorkflowService:
+    return SupplierOnboardingWorkflowService(unit_of_work)
+
+
+def get_start_supplier_onboarding_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+    analyze_supplier: Annotated[AnalyzeSupplierHandler, Depends(get_analyze_supplier_handler)],
+    request_review: Annotated[RequestSupplierReviewHandler, Depends(get_request_supplier_review_handler)],
+) -> StartSupplierOnboardingWorkflowHandler:
+    return StartSupplierOnboardingWorkflowHandler(
+        analyze_supplier=analyze_supplier,
+        request_review=request_review,
+        service=SupplierOnboardingWorkflowService(unit_of_work),
+    )
+
+
+def get_decide_supplier_review_handler(
+    unit_of_work: SupplierUnitOfWorkDependency,
+) -> DecideSupplierReviewHandler:
+    return DecideSupplierReviewHandler(
+        unit_of_work=unit_of_work,
+        service=SupplierOnboardingWorkflowService(unit_of_work),
+    )
+
+
+def get_ingest_policy_handler(
+    settings: Annotated[Settings, Depends(get_settings)],
+    embedding_provider: Annotated[EmbeddingProvider, Depends(get_embedding_provider)],
+) -> IngestPolicyHandler:
+    if not settings.opensearch_endpoint:
+        raise SupplierAnalysisProviderError("OPENSEARCH_ENDPOINT is required to ingest policies.")
+
+    client = _build_opensearch_client(
+        settings.opensearch_endpoint,
+        settings.aws_region,
+        settings.opensearch_service,
+    )
+    initializer = OpenSearchPolicyIndexInitializer(
+        client,
+        index_name=settings.opensearch_index_name,
+        dimensions=settings.embedding_dimensions,
+    )
+    policy_index = OpenSearchPolicyIndex(
+        client,
+        index_name=settings.opensearch_index_name,
+    )
+
+    class _InitializingPolicyIndex:
+        async def delete_document(self, document_id: str, version: str) -> None:
+            await initializer.ensure_exists()
+            await policy_index.delete_document(document_id, version)
+
+        async def upsert(self, chunks) -> None:
+            await policy_index.upsert(chunks)
+
+    return IngestPolicyHandler(
+        chunker=SimpleDocumentChunker(),
+        embedding_provider=embedding_provider,
+        policy_index=_InitializingPolicyIndex(),
+    )

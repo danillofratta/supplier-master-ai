@@ -22,6 +22,7 @@ from api_gateway.routes.health import (
 from api_gateway.routes.suppliers import (
     router as suppliers_router,
 )
+from api_gateway.routes.policies import router as policies_router
 
 from api_gateway.shared.logging import (
     configure_logging,
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(suppliers_router)
+    app.include_router(policies_router)
 
     return app
 

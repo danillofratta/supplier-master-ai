@@ -15,6 +15,7 @@ import type {
 import {
   StatusBadge,
 } from "../components/StatusBadge";
+import { getApiErrorMessage } from "../api/apiError";
 
 export function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<
@@ -31,9 +32,12 @@ export function SuppliersPage() {
       try {
         setError(null);
         setSuppliers(await getSuppliers());
-      } catch {
+      } catch (error: unknown) {
         setError(
-          "Unable to load suppliers through the API Gateway."
+          getApiErrorMessage(
+            error,
+            "Unable to load suppliers through the API Gateway."
+          )
         );
       } finally {
         setLoading(false);

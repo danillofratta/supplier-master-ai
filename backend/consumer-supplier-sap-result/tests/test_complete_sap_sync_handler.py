@@ -30,6 +30,7 @@ async def test_completion_updates_supplier_workflow_and_inbox():
         status=SupplierOnboardingStatus.SYNCING_TO_SAP,
     )
     await uow.workflows.add(workflow)
+    previous_updated_at = workflow.updated_at
 
     cmd = CompleteSapSyncCommand(
         message_id=uuid4(),
@@ -47,6 +48,7 @@ async def test_completion_updates_supplier_workflow_and_inbox():
     )
     assert stored.status == SupplierOnboardingStatus.COMPLETED
     assert stored.sap_business_partner_id == "100000001"
+    assert stored.updated_at >= previous_updated_at
     assert await uow.inbox.exists(cmd.message_id)
 
 

@@ -6,6 +6,7 @@ from api_supplier.domain.entities.supplier_onboarding_workflow import (
 )
 from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
     SupplierNotFoundForOnboardingError,
+    SupplierOnboardingAlreadyStartedError,
     SupplierOnboardingWorkflowNotFoundError,
 )
 from api_supplier.features.suppliers.onboarding_workflow.integration_events import (
@@ -28,10 +29,32 @@ class SupplierOnboardingWorkflowService:
         supplier_id: UUID,
     ) -> SupplierOnboardingWorkflow:
         async with self._unit_of_work as uow:
-            supplier = await uow.suppliers.get_by_id(supplier_id)
+            supplier = await uow.suppliers.get_by_id(
+                supplier_id
+            )
 
             if supplier is None:
-                raise SupplierNotFoundForOnboardingError(supplier_id)
+                raise SupplierNotFoundForOnboardingError(
+                    supplier_id
+                )
+
+            latest = (
+                await uow.onboarding_workflows
+                .get_latest_by_supplier_id(
+                    supplier_id
+                )
+            )
+
+            if (
+                latest is not None
+                and latest.status.value
+                not in {"failed", "rejected"}
+            ):
+                raise SupplierOnboardingAlreadyStartedError(
+                    supplier_id=supplier_id,
+                    workflow_id=latest.workflow_id,
+                    status=latest.status.value,
+                )
 
             workflow = SupplierOnboardingWorkflow.start(
                 supplier_id=supplier.supplier_id

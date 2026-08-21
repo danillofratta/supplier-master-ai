@@ -15,6 +15,15 @@ from api_supplier.features.suppliers.analyze.exceptions import (
     SupplierAnalysisProviderError,
 )
 
+from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
+    InvalidSupplierOnboardingTransitionError,
+    SupplierNotFoundForOnboardingError,
+    SupplierOnboardingAlreadyStartedError,
+    SupplierOnboardingForSupplierNotFoundError,
+    SupplierOnboardingWorkflowNotFoundError,
+)
+from api_supplier.features.policies.ingest.handler import EmptyPolicyContentError
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,6 +97,62 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "message": "The AI analysis provider is temporarily unavailable.",
             },
         )
+
+    @app.exception_handler(SupplierNotFoundForOnboardingError)
+    async def handle_supplier_not_found_for_onboarding(request: Request, exc: SupplierNotFoundForOnboardingError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"code": "supplier_not_found", "message": str(exc)})
+
+    @app.exception_handler(SupplierOnboardingWorkflowNotFoundError)
+    async def handle_onboarding_not_found(
+        request: Request,
+        exc: SupplierOnboardingWorkflowNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": "onboarding_not_found",
+                "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(SupplierOnboardingForSupplierNotFoundError)
+    async def handle_supplier_onboarding_not_found(
+        request: Request,
+        exc: SupplierOnboardingForSupplierNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": "onboarding_not_found",
+                "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(SupplierOnboardingAlreadyStartedError)
+    async def handle_onboarding_already_started(
+        request: Request,
+        exc: SupplierOnboardingAlreadyStartedError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "code": "onboarding_already_started",
+                "message": str(exc),
+                "details": {
+                    "supplier_id": str(exc.supplier_id),
+                    "workflow_id": str(exc.workflow_id),
+                    "status": exc.status,
+                },
+            },
+        )
+
+    @app.exception_handler(InvalidSupplierOnboardingTransitionError)
+    async def handle_invalid_onboarding_transition(request: Request, exc: InvalidSupplierOnboardingTransitionError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"code": "invalid_onboarding_transition", "message": str(exc)})
+
+    @app.exception_handler(EmptyPolicyContentError)
+    async def handle_empty_policy(request: Request, exc: EmptyPolicyContentError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"code": "empty_policy_content", "message": str(exc)})
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(

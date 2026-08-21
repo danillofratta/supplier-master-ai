@@ -10,6 +10,8 @@ import {
   analyzeSupplier,
   getSupplier,
   getSupplierOnboarding,
+  startSupplierOnboarding,
+  decideSupplierReview,
 } from "../api/suppliersApi";
 import {
   OnboardingTimeline,
@@ -22,6 +24,7 @@ import type {
   SupplierAnalysisResponse,
   SupplierOnboarding,
 } from "../models/supplier";
+import { getApiErrorMessage } from "../api/apiError";
 
 export function SupplierDetailsPage() {
   const { supplierId } = useParams<{
@@ -42,6 +45,8 @@ export function SupplierDetailsPage() {
     useState(true);
   const [analyzing, setAnalyzing] =
     useState(false);
+  const [startingOnboarding, setStartingOnboarding] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [error, setError] =
     useState<string | null>(null);
 
@@ -66,9 +71,12 @@ export function SupplierDetailsPage() {
 
         setSupplier(supplierResult);
         setOnboarding(onboardingResult);
-      } catch {
+      } catch (error: unknown) {
         setError(
-          "Unable to load supplier details."
+          getApiErrorMessage(
+            error,
+            "Unable to load supplier details."
+          )
         );
       } finally {
         setLoading(false);
@@ -77,6 +85,32 @@ export function SupplierDetailsPage() {
 
     load();
   }, [supplierId]);
+
+  useEffect(() => {
+    if (
+      !supplierId ||
+      !onboarding ||
+      !["syncing_to_sap", "analyzing"].includes(onboarding.status)
+    ) {
+      return;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const [latestSupplier, latestOnboarding] = await Promise.all([
+          getSupplier(supplierId),
+          getSupplierOnboarding(supplierId),
+        ]);
+
+        setSupplier(latestSupplier);
+        setOnboarding(latestOnboarding);
+      } catch {
+        // Keep current data. The next poll can recover from transient failures.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [supplierId, onboarding?.status]);
 
   async function runAnalysis() {
     if (!supplierId) {
@@ -91,17 +125,69 @@ export function SupplierDetailsPage() {
         await analyzeSupplier(supplierId);
 
       setAnalysis(result);
-    } catch (error: any) {
-      const detail =
-        error?.response?.data?.detail;
-
+    } catch (error: unknown) {
       setError(
-        typeof detail === "string"
-          ? detail
-          : "Unable to analyze supplier."
+        getApiErrorMessage(
+          error,
+          "Unable to analyze supplier."
+        )
       );
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  async function refreshOnboarding() {
+    if (!supplierId) {
+      return;
+    }
+
+    const [latestSupplier, latestOnboarding] = await Promise.all([
+      getSupplier(supplierId),
+      getSupplierOnboarding(supplierId),
+    ]);
+
+    setSupplier(latestSupplier);
+    setOnboarding(latestOnboarding);
+  }
+
+  async function startOnboarding() {
+    if (!supplierId) return;
+    setStartingOnboarding(true);
+    setError(null);
+    try {
+      await startSupplierOnboarding(supplierId);
+      await refreshOnboarding();
+    } catch (error: unknown) {
+      setError(
+        getApiErrorMessage(
+          error,
+          "Unable to start onboarding."
+        )
+      );
+    } finally {
+      setStartingOnboarding(false);
+    }
+  }
+
+  async function reviewDecision(decision: "approve" | "reject") {
+    if (!supplierId) return;
+    const reason = decision === "reject" ? window.prompt("Rejection reason") ?? undefined : undefined;
+    if (decision === "reject" && !reason) return;
+    setReviewing(true);
+    setError(null);
+    try {
+      await decideSupplierReview(supplierId, decision, reason);
+      await refreshOnboarding();
+    } catch (error: unknown) {
+      setError(
+        getApiErrorMessage(
+          error,
+          "Unable to apply review decision."
+        )
+      );
+    } finally {
+      setReviewing(false);
     }
   }
 
@@ -157,15 +243,14 @@ export function SupplierDetailsPage() {
           </p>
         </div>
 
-        <button
-          className="button primary"
-          onClick={runAnalysis}
-          disabled={analyzing}
-        >
-          {analyzing
-            ? "Analyzing..."
-            : "Run AI Analysis"}
-        </button>
+        <div className="action-row">
+          <button className="button" onClick={runAnalysis} disabled={analyzing}>
+            {analyzing ? "Analyzing..." : "Run AI Analysis"}
+          </button>
+          <button className="button primary" onClick={startOnboarding} disabled={startingOnboarding || (!!onboarding && !["failed", "rejected"].includes(onboarding.status))}>
+            {startingOnboarding ? "Starting..." : onboarding && ["failed", "rejected"].includes(onboarding.status) ? "Retry AI Onboarding" : onboarding ? "Onboarding started" : "Start AI Onboarding"}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -283,6 +368,16 @@ export function SupplierDetailsPage() {
                 )}
               </div>
 
+              {onboarding.status === "waiting_human_review" && (
+                <div className="review-actions">
+                  <div><strong>Human review required</strong><p>Approve to continue asynchronously to SAP, or reject the onboarding.</p></div>
+                  <div className="action-row">
+                    <button className="button" disabled={reviewing} onClick={() => reviewDecision("reject")}>Reject</button>
+                    <button className="button primary" disabled={reviewing} onClick={() => reviewDecision("approve")}>Approve & send to SAP</button>
+                  </div>
+                </div>
+              )}
+
               <OnboardingTimeline
                 onboarding={onboarding}
               />
@@ -315,6 +410,17 @@ export function SupplierDetailsPage() {
               <span>Confidence</span>
             </div>
           </div>
+
+          {analysis.confidence === 0 &&
+            analysis.retrieved_policy_ids.length === 0 && (
+              <div className="callout callout-warning">
+                <strong>Insufficient policy evidence</strong>
+                <span>
+                  No relevant policy was retrieved, so this result
+                  should not be treated as a reliable automated decision.
+                </span>
+              </div>
+            )}
 
           <div className="analysis-grid">
             <div className="analysis-card">

@@ -12,6 +12,7 @@ import {
 import type {
   CreateSupplierRequest,
 } from "../models/supplier";
+import { getApiErrorMessage } from "../api/apiError";
 
 const initialForm: CreateSupplierRequest = {
   name: "",
@@ -79,14 +80,12 @@ export function CreateSupplierPage() {
       navigate(
         `/suppliers/${created.supplier_id}`
       );
-    } catch (error: any) {
-      const detail =
-        error?.response?.data?.detail;
-
+    } catch (error: unknown) {
       setError(
-        typeof detail === "string"
-          ? detail
-          : "Unable to create supplier."
+        getApiErrorMessage(
+          error,
+          "Unable to create supplier."
+        )
       );
     } finally {
       setSaving(false);

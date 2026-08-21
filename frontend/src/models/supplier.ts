@@ -66,3 +66,35 @@ export interface SupplierAnalysisResponse {
   policy_violations: string[];
   retrieved_policy_ids: string[];
 }
+
+export interface StartSupplierOnboardingResponse {
+  onboarding_workflow_id: string;
+  supplier_id: string;
+  status: string;
+}
+
+export interface SupplierReviewDecisionRequest {
+  decision: "approve" | "reject";
+  reason?: string;
+}
+
+export interface IngestPolicyRequest {
+  document_id: string;
+  title: string;
+  content: string;
+  policy_type: string;
+  version: string;
+  effective_date: string;
+}
+
+export interface IngestPolicyResponse {
+  document_id: string;
+  chunks_indexed: number;
+  embedding_dimensions: number;
+}
+
+export interface SupplierReviewDecisionResponse {
+  workflow_id: string;
+  supplier_id: string;
+  status: string;
+}

@@ -189,3 +189,47 @@ def test_authorization_header_is_forwarded() -> None:
 
         assert response.status_code == 200
         assert fake.calls[0]["authorization"] == "Bearer token"
+
+
+def test_onboarding_command_routes_are_proxied() -> None:
+    app = create_app()
+
+    with TestClient(app) as client:
+        fake = FakeSupplierApiClient()
+        app.state.supplier_api_client = fake
+        supplier_id = "11111111-1111-1111-1111-111111111111"
+
+        start = client.post(
+            f"/api/v1/suppliers/{supplier_id}/onboarding"
+        )
+        review = client.post(
+            f"/api/v1/suppliers/{supplier_id}/onboarding/review-decision",
+            json={"decision": "approve"},
+        )
+
+        assert start.status_code == 200
+        assert review.status_code == 200
+        assert fake.calls[0]["path"] == (
+            f"/v1/suppliers/{supplier_id}/onboarding"
+        )
+        assert fake.calls[1]["path"] == (
+            f"/v1/suppliers/{supplier_id}/onboarding/review-decision"
+        )
+
+
+def test_policy_ingest_is_proxied() -> None:
+    app = create_app()
+
+    with TestClient(app) as client:
+        fake = FakeSupplierApiClient()
+        app.state.supplier_api_client = fake
+
+        response = client.post(
+            "/api/v1/policies/ingest",
+            json={"document_id": "policy-001"},
+        )
+
+        assert response.status_code == 200
+        assert fake.calls[0]["method"] == "POST"
+        assert fake.calls[0]["path"] == "/v1/policies/ingest"
+        assert fake.calls[0]["content"]

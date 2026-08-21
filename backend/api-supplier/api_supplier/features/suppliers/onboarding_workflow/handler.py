@@ -46,11 +46,18 @@ class StartSupplierOnboardingWorkflowHandler:
             workflow.workflow_id
         )
 
-        analysis = await self._analyze_supplier.handle(
-            AnalyzeSupplierCommand(
-                supplier_id=command.supplier_id
+        try:
+            analysis = await self._analyze_supplier.handle(
+                AnalyzeSupplierCommand(
+                    supplier_id=command.supplier_id
+                )
             )
-        )
+        except Exception as exc:
+            await self._service.fail_workflow(
+                workflow.workflow_id,
+                f"Supplier analysis failed: {type(exc).__name__}",
+            )
+            raise
 
         if (
             analysis.recommended_action

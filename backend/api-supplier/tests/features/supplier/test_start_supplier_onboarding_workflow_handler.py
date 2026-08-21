@@ -162,3 +162,29 @@ async def test_reject_does_not_schedule_external_work() -> None:
     assert result.status == SupplierOnboardingStatus.REJECTED
     assert review.calls == 0
     assert await uow.outbox_messages.get_pending_messages() == ()
+
+
+@pytest.mark.asyncio
+async def test_cannot_start_second_active_onboarding() -> None:
+    from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
+        SupplierOnboardingAlreadyStartedError,
+    )
+
+    supplier, _, handler, _ = await build_handler(
+        SupplierRecommendedAction.HUMAN_REVIEW
+    )
+
+    await handler.handle(
+        StartSupplierOnboardingWorkflowCommand(
+            supplier_id=supplier.supplier_id
+        )
+    )
+
+    with pytest.raises(
+        SupplierOnboardingAlreadyStartedError
+    ):
+        await handler.handle(
+            StartSupplierOnboardingWorkflowCommand(
+                supplier_id=supplier.supplier_id
+            )
+        )
