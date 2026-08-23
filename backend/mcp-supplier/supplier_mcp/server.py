@@ -1,4 +1,6 @@
 from mcp.server import MCPServer
+from mcp.types import ToolAnnotations
+
 from supplier_mcp.exceptions import (
     ConfirmationRequiredError,
 )
@@ -22,7 +24,13 @@ async def health() -> str:
     """Health check endpoint for the Supplier Master MCP Server."""
     return await api_client.health()
 
-@mcp.tool()
+@mcp.tool(
+    title="Get Supplier",
+    annotations=ToolAnnotations(
+        read_only_hint=True,
+        open_world_hint=False,
+    ),
+)
 async def get_supplier(supplier_id: str) -> SupplierResponse:
     """
     Get a supplier by its identifier.
@@ -30,7 +38,13 @@ async def get_supplier(supplier_id: str) -> SupplierResponse:
 
     return await api_client.get_supplier(supplier_id=supplier_id)
 
-@mcp.tool()
+@mcp.tool(
+        title="Get List of Suppliers",
+        annotations=ToolAnnotations(
+            read_only_hint=True,
+            open_world_hint=False,
+        ),
+)
 async def get_suppliers() -> SupplierListResponse:
     """
     Get all suppliers.
@@ -38,7 +52,13 @@ async def get_suppliers() -> SupplierListResponse:
 
     return await api_client.get_suppliers()
 
-@mcp.tool()
+@mcp.tool(
+        title="Analyze Supplier",
+        annotations=ToolAnnotations(
+            read_only_hint=True,
+            open_world_hint=False,
+        ),
+)
 async def analyze_supplier(supplier_id: str) -> SupplierAnalysisResponse:
     """
     Analyze a supplier against corporate policies using RAG and AI.
@@ -49,7 +69,13 @@ async def analyze_supplier(supplier_id: str) -> SupplierAnalysisResponse:
 
     return await api_client.analyze_supplier(supplier_id=supplier_id)
 
-@mcp.tool()
+@mcp.tool(
+        title="Get Supplier Onboarding Status",
+        annotations=ToolAnnotations(
+            read_only_hint=True,
+            open_world_hint=False,
+        ),
+)
 async def get_onboarding_status(supplier_id: str) -> OnboardingStatusResponse:
     """
     Get the current onboarding status for a supplier.
@@ -107,7 +133,15 @@ def investigate_supplier(
         Do not modify the supplier.
         """
 
-@mcp.tool()
+@mcp.tool(
+        title="Start Supplier Onboarding",
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+)
 async def start_supplier_onboarding(
     supplier_id: str,
     confirmed: bool = False,
