@@ -5,7 +5,9 @@ from uuid import uuid4
 from supplier_mcp.models import OnboardingStatusResponse, SupplierAnalysisResponse, SupplierResponse, SupplierListResponse
 from supplier_mcp.exceptions import (
     SupplierApiError,
+    ApiNotFoundError,
     SupplierNotFoundError,
+    OnboardingNotFoundError
 )
 
 class SupplierApiClient:
@@ -53,8 +55,8 @@ class SupplierApiClient:
         #     ) from exc
 
         if response.status_code == 404:
-            raise SupplierNotFoundError(
-                f"Supplier was not found. "
+            raise ApiNotFoundError(
+                f"Resource not found at {path}. "
                 f"Correlation ID: {correlation_id}"
             )
 
@@ -81,10 +83,17 @@ class SupplierApiClient:
     async def get_suppliers(
         self,
     ) -> SupplierListResponse:
-        result = await self._request(
-            method="GET",
-            path="/api/v1/suppliers",
-        )
+
+        try:
+            result = await self._request(
+                method="GET",
+                path="/api/v1/suppliers",
+            )
+
+        except ApiNotFoundError as exc:
+            raise SupplierNotFoundError(
+                f"Suppliers were not found."
+            ) from exc
 
         return SupplierListResponse.model_validate(
             result
@@ -107,9 +116,16 @@ class SupplierApiClient:
         self,
         supplier_id: str,
     ) -> OnboardingStatusResponse:
-        result = await self._request(
-            method="GET",
-            path=f"/api/v1/suppliers/{supplier_id}/onboarding",
-        )
+        try:
+            result = await self._request(
+                method="GET",
+                path=f"/api/v1/suppliers/{supplier_id}/onboarding",
+            )
+
+        except ApiNotFoundError as exc:
+            raise OnboardingNotFoundError(
+                f"No onboarding workflow was found "
+                f"for supplier {supplier_id}."
+            ) from exc
 
         return OnboardingStatusResponse.model_validate(result)
