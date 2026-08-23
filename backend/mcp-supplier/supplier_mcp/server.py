@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
@@ -138,12 +140,13 @@ def investigate_supplier(
         annotations=ToolAnnotations(
             read_only_hint=False,
             destructive_hint=False,
-            idempotent_hint=False,
+            idempotent_hint=True,
             open_world_hint=True,
         ),
 )
 async def start_supplier_onboarding(
     supplier_id: str,
+    idempotency_key: UUID,
     confirmed: bool = False,
 ) -> StartOnboardingResponse:
     """
@@ -163,6 +166,7 @@ async def start_supplier_onboarding(
         )
 
     return await api_client.start_onboarding(
-        supplier_id=supplier_id
+        supplier_id=supplier_id,
+        idempotency_key=idempotency_key
     )
 

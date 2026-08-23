@@ -6,6 +6,10 @@ from api_supplier.domain.entities.supplier_onboarding_workflow import (
 )
 
 
+class SupplierOnboardingWorkflowWriteConflictError(Exception):
+    """Raised when a concurrent workflow insert violates a DB constraint."""
+
+
 class SupplierOnboardingWorkflowRepository(Protocol):
     async def add(
         self,
@@ -19,6 +23,12 @@ class SupplierOnboardingWorkflowRepository(Protocol):
     ) -> SupplierOnboardingWorkflow | None:
         ...
 
+    async def get_by_idempotency_key(
+        self,
+        idempotency_key: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        ...
+
     async def update(
         self,
         workflow: SupplierOnboardingWorkflow,
@@ -29,4 +39,4 @@ class SupplierOnboardingWorkflowRepository(Protocol):
         self,
         supplier_id: UUID,
     ) -> SupplierOnboardingWorkflow | None:
-        ...        
+        ...

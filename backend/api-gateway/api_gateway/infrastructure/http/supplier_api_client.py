@@ -34,11 +34,19 @@ class SupplierApiClient:
         content: bytes | None = None,
         content_type: str | None = None,
         authorization: str | None = None,
+        additional_headers: Mapping[str, str] | None = None,
     ) -> httpx.Response:
         headers = {
             "X-Correlation-ID": correlation_id,
             "Accept": "application/json",
         }
+
+        if additional_headers:
+            headers.update(additional_headers)
+
+        # Gateway-controlled headers win over caller-supplied values.
+        headers["X-Correlation-ID"] = correlation_id
+        headers["Accept"] = "application/json"
 
         if content_type:
             headers["Content-Type"] = content_type

@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 
 from api_supplier.bootstrap.dependencies import get_start_supplier_onboarding_handler
 from api_supplier.features.suppliers.onboarding_workflow.command import StartSupplierOnboardingWorkflowCommand
@@ -18,9 +18,13 @@ router = APIRouter(prefix="/v1/suppliers", tags=["Suppliers"])
 )
 async def start_supplier_onboarding(
     supplier_id: UUID,
+    idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
     handler: Annotated[StartSupplierOnboardingWorkflowHandler, Depends(get_start_supplier_onboarding_handler)],
 ) -> StartSupplierOnboardingResponse:
-    result = await handler.handle(StartSupplierOnboardingWorkflowCommand(supplier_id=supplier_id))
+    result = await handler.handle(StartSupplierOnboardingWorkflowCommand(
+        supplier_id=supplier_id,
+        idempotency_key=idempotency_key
+    ))  
     return StartSupplierOnboardingResponse(
         onboarding_workflow_id=result.onboarding_workflow_id,
         supplier_id=result.supplier_id,

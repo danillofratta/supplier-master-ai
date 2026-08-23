@@ -13,8 +13,25 @@ from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
 )
 
 
+def start_workflow() -> SupplierOnboardingWorkflow:
+    return SupplierOnboardingWorkflow.start(
+        supplier_id=uuid4(),
+        idempotency_key=uuid4(),
+    )
+
+
+def test_workflow_stores_idempotency_key() -> None:
+    idempotency_key = uuid4()
+    workflow = SupplierOnboardingWorkflow.start(
+        supplier_id=uuid4(),
+        idempotency_key=idempotency_key,
+    )
+
+    assert workflow.idempotency_key == idempotency_key
+
+
 def test_workflow_human_review_transition() -> None:
-    workflow = SupplierOnboardingWorkflow.start(uuid4())
+    workflow = start_workflow()
 
     workflow.start_analysis()
     workflow.wait_for_human_review("sys-001")
@@ -24,7 +41,7 @@ def test_workflow_human_review_transition() -> None:
 
 
 def test_workflow_can_complete_after_sap_sync() -> None:
-    workflow = SupplierOnboardingWorkflow.start(uuid4())
+    workflow = start_workflow()
 
     workflow.start_analysis()
     workflow.start_sap_sync()
@@ -35,7 +52,7 @@ def test_workflow_can_complete_after_sap_sync() -> None:
 
 
 def test_invalid_transition_is_rejected() -> None:
-    workflow = SupplierOnboardingWorkflow.start(uuid4())
+    workflow = start_workflow()
 
     with pytest.raises(InvalidSupplierOnboardingTransitionError):
         workflow.complete("100000001")

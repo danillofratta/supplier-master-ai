@@ -74,6 +74,11 @@ async def proxy_supplier_request(
             authorization=request.headers.get(
                 "authorization"
             ),
+            additional_headers={
+                "Idempotency-Key": request.headers["idempotency-key"]
+            }
+            if "idempotency-key" in request.headers
+            else None,
         )
     except (
         httpx.TimeoutException,

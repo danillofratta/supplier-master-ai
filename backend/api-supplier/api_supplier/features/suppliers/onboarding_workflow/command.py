@@ -5,3 +5,4 @@ from uuid import UUID
 @dataclass(frozen=True, slots=True)
 class StartSupplierOnboardingWorkflowCommand:
     supplier_id: UUID
+    idempotency_key: UUID

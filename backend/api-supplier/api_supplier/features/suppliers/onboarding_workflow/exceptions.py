@@ -41,5 +41,22 @@ class SupplierOnboardingAlreadyStartedError(Exception):
         )
 
 
+class SupplierOnboardingIdempotencyConflictError(Exception):
+    def __init__(
+        self,
+        idempotency_key: UUID,
+        existing_supplier_id: UUID,
+        requested_supplier_id: UUID,
+    ) -> None:
+        self.idempotency_key = idempotency_key
+        self.existing_supplier_id = existing_supplier_id
+        self.requested_supplier_id = requested_supplier_id
+        super().__init__(
+            f"Idempotency key '{idempotency_key}' was already used for "
+            f"supplier '{existing_supplier_id}' and cannot be reused for "
+            f"supplier '{requested_supplier_id}'."
+        )
+
+
 class InvalidSupplierOnboardingTransitionError(Exception):
     pass

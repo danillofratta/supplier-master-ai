@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,6 +10,20 @@ from api_supplier.infrastructure.persistence.sqlalchemy.base import Base
 
 class SupplierOnboardingWorkflowModel(Base):
     __tablename__ = "supplier_onboarding_workflow"
+    __table_args__ = (
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_supplier_onboarding_workflow_idempotency_key",
+        ),
+        Index(
+            "uq_supplier_onboarding_workflow_active_supplier",
+            "supplier_id",
+            unique=True,
+            postgresql_where=text(
+                "status NOT IN ('failed', 'rejected')"
+            ),
+        ),
+    )
 
     workflow_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -19,6 +33,10 @@ class SupplierOnboardingWorkflowModel(Base):
         PG_UUID(as_uuid=True),
         nullable=False,
         index=True,
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=False,
     )
     supplier_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

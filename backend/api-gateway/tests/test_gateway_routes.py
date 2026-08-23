@@ -23,6 +23,7 @@ class FakeSupplierApiClient:
         content=None,
         content_type=None,
         authorization=None,
+        additional_headers=None,
     ) -> httpx.Response:
         if self.raise_error is not None:
             raise self.raise_error
@@ -35,6 +36,7 @@ class FakeSupplierApiClient:
             "content": content,
             "content_type": content_type,
             "authorization": authorization,
+            "additional_headers": additional_headers,
         })
 
         return httpx.Response(
@@ -199,8 +201,10 @@ def test_onboarding_command_routes_are_proxied() -> None:
         app.state.supplier_api_client = fake
         supplier_id = "11111111-1111-1111-1111-111111111111"
 
+        idempotency_key = "22222222-2222-2222-2222-222222222222"
         start = client.post(
-            f"/api/v1/suppliers/{supplier_id}/onboarding"
+            f"/api/v1/suppliers/{supplier_id}/onboarding",
+            headers={"Idempotency-Key": idempotency_key},
         )
         review = client.post(
             f"/api/v1/suppliers/{supplier_id}/onboarding/review-decision",
@@ -212,6 +216,9 @@ def test_onboarding_command_routes_are_proxied() -> None:
         assert fake.calls[0]["path"] == (
             f"/v1/suppliers/{supplier_id}/onboarding"
         )
+        assert fake.calls[0]["additional_headers"] == {
+            "Idempotency-Key": idempotency_key
+        }
         assert fake.calls[1]["path"] == (
             f"/v1/suppliers/{supplier_id}/onboarding/review-decision"
         )

@@ -39,9 +39,19 @@ class StartSupplierOnboardingWorkflowHandler:
         self,
         command: StartSupplierOnboardingWorkflowCommand,
     ) -> StartSupplierOnboardingWorkflowResult:
-        workflow = await self._service.create_workflow(
-            command.supplier_id
+        creation = await self._service.create_workflow(
+            command.supplier_id,
+            command.idempotency_key,
         )
+        workflow = creation.workflow
+
+        if not creation.created:
+            return StartSupplierOnboardingWorkflowResult(
+                onboarding_workflow_id=workflow.workflow_id,
+                supplier_id=workflow.supplier_id,
+                status=workflow.status,
+            )
+
         workflow = await self._service.mark_analyzing(
             workflow.workflow_id
         )

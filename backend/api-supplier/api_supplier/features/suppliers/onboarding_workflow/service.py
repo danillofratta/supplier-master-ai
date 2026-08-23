@@ -1,12 +1,17 @@
+from dataclasses import dataclass
 from uuid import UUID
 
 from api_supplier.domain.entities.outbox.outbox_message import OutboxMessage
 from api_supplier.domain.entities.supplier_onboarding_workflow import (
     SupplierOnboardingWorkflow,
 )
+from api_supplier.domain.repositories.supplier_onboarding_workflow_repository import (
+    SupplierOnboardingWorkflowWriteConflictError,
+)
 from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
     SupplierNotFoundForOnboardingError,
     SupplierOnboardingAlreadyStartedError,
+    SupplierOnboardingIdempotencyConflictError,
     SupplierOnboardingWorkflowNotFoundError,
 )
 from api_supplier.features.suppliers.onboarding_workflow.integration_events import (
@@ -15,6 +20,12 @@ from api_supplier.features.suppliers.onboarding_workflow.integration_events impo
 )
 from api_supplier.shared.messaging.integration_event import IntegrationEvent
 from api_supplier.shared.unit_of_work import SupplierUnitOfWork
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowCreationResult:
+    workflow: SupplierOnboardingWorkflow
+    created: bool
 
 
 class SupplierOnboardingWorkflowService:
@@ -27,41 +38,133 @@ class SupplierOnboardingWorkflowService:
     async def create_workflow(
         self,
         supplier_id: UUID,
-    ) -> SupplierOnboardingWorkflow:
-        async with self._unit_of_work as uow:
-            supplier = await uow.suppliers.get_by_id(
-                supplier_id
+        idempotency_key: UUID,
+    ) -> WorkflowCreationResult:
+        """Create an onboarding workflow or replay an existing idempotent request.
+
+        A repeated request with the same idempotency key and supplier returns the
+        existing workflow without executing the workflow again. Reusing the same
+        key for a different supplier is rejected.
+        """
+        try:
+            async with self._unit_of_work as uow:
+                existing = (
+                    await uow.onboarding_workflows.get_by_idempotency_key(
+                        idempotency_key
+                    )
+                )
+                if existing is not None:
+                    self._ensure_idempotency_key_matches_supplier(
+                        existing,
+                        supplier_id,
+                        idempotency_key,
+                    )
+                    return WorkflowCreationResult(
+                        workflow=existing,
+                        created=False,
+                    )
+
+                supplier = await uow.suppliers.get_by_id(
+                    supplier_id
+                )
+                if supplier is None:
+                    raise SupplierNotFoundForOnboardingError(
+                        supplier_id
+                    )
+
+                latest = (
+                    await uow.onboarding_workflows
+                    .get_latest_by_supplier_id(
+                        supplier_id
+                    )
+                )
+
+                if (
+                    latest is not None
+                    and latest.status.value
+                    not in {"failed", "rejected"}
+                ):
+                    raise SupplierOnboardingAlreadyStartedError(
+                        supplier_id=supplier_id,
+                        workflow_id=latest.workflow_id,
+                        status=latest.status.value,
+                    )
+
+                workflow = SupplierOnboardingWorkflow.start(
+                    supplier_id=supplier.supplier_id,
+                    idempotency_key=idempotency_key,
+                )
+                await uow.onboarding_workflows.add(workflow)
+                await uow.commit()
+                return WorkflowCreationResult(
+                    workflow=workflow,
+                    created=True,
+                )
+        except SupplierOnboardingWorkflowWriteConflictError as exc:
+            # A concurrent request can pass the pre-check and win the unique
+            # constraint before this transaction flushes. Re-read in a fresh
+            # UoW and resolve the conflict deterministically.
+            return await self._resolve_concurrent_create_conflict(
+                supplier_id=supplier_id,
+                idempotency_key=idempotency_key,
+                cause=exc,
             )
 
-            if supplier is None:
-                raise SupplierNotFoundForOnboardingError(
-                    supplier_id
+    async def _resolve_concurrent_create_conflict(
+        self,
+        *,
+        supplier_id: UUID,
+        idempotency_key: UUID,
+        cause: Exception,
+    ) -> WorkflowCreationResult:
+        async with self._unit_of_work as uow:
+            existing = (
+                await uow.onboarding_workflows.get_by_idempotency_key(
+                    idempotency_key
+                )
+            )
+            if existing is not None:
+                self._ensure_idempotency_key_matches_supplier(
+                    existing,
+                    supplier_id,
+                    idempotency_key,
+                )
+                return WorkflowCreationResult(
+                    workflow=existing,
+                    created=False,
                 )
 
             latest = (
-                await uow.onboarding_workflows
-                .get_latest_by_supplier_id(
+                await uow.onboarding_workflows.get_latest_by_supplier_id(
                     supplier_id
                 )
             )
-
             if (
                 latest is not None
-                and latest.status.value
-                not in {"failed", "rejected"}
+                and latest.status.value not in {"failed", "rejected"}
             ):
                 raise SupplierOnboardingAlreadyStartedError(
                     supplier_id=supplier_id,
                     workflow_id=latest.workflow_id,
                     status=latest.status.value,
-                )
+                ) from cause
 
-            workflow = SupplierOnboardingWorkflow.start(
-                supplier_id=supplier.supplier_id
+        # The constraint failed, but no idempotency/business conflict can be
+        # reconstructed. Preserve the original error for observability.
+        raise cause
+
+    @staticmethod
+    def _ensure_idempotency_key_matches_supplier(
+        existing: SupplierOnboardingWorkflow,
+        requested_supplier_id: UUID,
+        idempotency_key: UUID,
+    ) -> None:
+        if existing.supplier_id != requested_supplier_id:
+            raise SupplierOnboardingIdempotencyConflictError(
+                idempotency_key=idempotency_key,
+                existing_supplier_id=existing.supplier_id,
+                requested_supplier_id=requested_supplier_id,
             )
-            await uow.onboarding_workflows.add(workflow)
-            await uow.commit()
-            return workflow
 
     async def mark_analyzing(
         self,

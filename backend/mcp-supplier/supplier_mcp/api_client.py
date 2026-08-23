@@ -1,20 +1,22 @@
-from asyncio import timeout
+from collections.abc import Mapping
+from uuid import UUID, uuid4
 
 import httpx
-from uuid import uuid4
+
+from supplier_mcp.exceptions import (
+    ApiNotFoundError,
+    OnboardingNotFoundError,
+    SupplierApiError,
+    SupplierNotFoundError,
+)
 from supplier_mcp.models import (
     OnboardingStatusResponse,
-    SupplierAnalysisResponse,
-    SupplierResponse,
-    SupplierListResponse,
     StartOnboardingResponse,
+    SupplierAnalysisResponse,
+    SupplierListResponse,
+    SupplierResponse,
 )
-from supplier_mcp.exceptions import (
-    SupplierApiError,
-    ApiNotFoundError,
-    SupplierNotFoundError,
-    OnboardingNotFoundError
-)
+
 
 class SupplierApiClient:
     def __init__(
@@ -27,17 +29,18 @@ class SupplierApiClient:
         return "Supplier Master MCP Server is healthy."
 
     async def _request(
-            self,
-            method: str,
-            path: str,
+        self,
+        method: str,
+        path: str,
+        headers: Mapping[str, str] | None = None,
     ) -> dict | list:
         correlation_id = str(uuid4())
-
         url = f"{self._base_url}{path}"
 
-        headers = {
-            "X-Correlation-ID": correlation_id
-        }
+        request_headers = dict(headers or {})
+        # Correlation is generated per MCP -> Gateway request and cannot be
+        # overridden by callers accidentally.
+        request_headers["X-Correlation-ID"] = correlation_id
 
         try:
             timeout = httpx.Timeout(
@@ -45,20 +48,19 @@ class SupplierApiClient:
                 connect=10.0,
             )
 
-            async with httpx.AsyncClient( timeout=timeout) as client:
-                response = await client.request(method, url, headers=headers)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=request_headers,
+                )
         except httpx.RequestError as exc:
             raise SupplierApiError(
                 f"An error occurred while requesting {exc.request.url}. "
                 f"Error type: {type(exc).__name__}. "
                 f"Details: {str(exc)}. "
                 f"Correlation ID: {correlation_id}"
-    ) from exc                
-        # except httpx.RequestError as exc:
-        #     raise SupplierApiError(
-        #         f"An error occurred while requesting {exc.request.url!r}. "
-        #         f"Correlation ID: {correlation_id}"
-        #     ) from exc
+            ) from exc
 
         if response.status_code == 404:
             raise ApiNotFoundError(
@@ -67,56 +69,55 @@ class SupplierApiClient:
             )
 
         if response.status_code >= 400:
+            details = response.text.strip()
             raise SupplierApiError(
-                f"Supplier API returned HTTP "
-                f"{response.status_code}. "
+                f"Supplier API returned HTTP {response.status_code}. "
+                f"Details: {details}. "
                 f"Correlation ID: {correlation_id}"
             )
 
-        return response.json()        
+        return response.json()
 
     async def get_supplier(
         self,
         supplier_id: str,
     ) -> SupplierResponse:
-        result = await self._request(
-            method="GET",
-            path=f"/api/v1/suppliers/{supplier_id}",
-        )
+        try:
+            result = await self._request(
+                method="GET",
+                path=f"/api/v1/suppliers/{supplier_id}",
+            )
+        except ApiNotFoundError as exc:
+            raise SupplierNotFoundError(
+                f"Supplier {supplier_id} was not found."
+            ) from exc
 
         return SupplierResponse.model_validate(result)
 
     async def get_suppliers(
         self,
     ) -> SupplierListResponse:
-
-        try:
-            result = await self._request(
-                method="GET",
-                path="/api/v1/suppliers",
-            )
-
-        except ApiNotFoundError as exc:
-            raise SupplierNotFoundError(
-                f"Suppliers were not found."
-            ) from exc
-
-        return SupplierListResponse.model_validate(
-            result
+        result = await self._request(
+            method="GET",
+            path="/api/v1/suppliers",
         )
+        return SupplierListResponse.model_validate(result)
 
     async def analyze_supplier(
         self,
         supplier_id: str,
     ) -> SupplierAnalysisResponse:
-        result = await self._request(
-            method="POST",
-            path=f"/api/v1/suppliers/{supplier_id}/analysis",
-        )
+        try:
+            result = await self._request(
+                method="POST",
+                path=f"/api/v1/suppliers/{supplier_id}/analysis",
+            )
+        except ApiNotFoundError as exc:
+            raise SupplierNotFoundError(
+                f"Supplier {supplier_id} was not found."
+            ) from exc
 
-        return SupplierAnalysisResponse.model_validate(
-            result
-        )
+        return SupplierAnalysisResponse.model_validate(result)
 
     async def get_onboarding_status(
         self,
@@ -127,7 +128,6 @@ class SupplierApiClient:
                 method="GET",
                 path=f"/api/v1/suppliers/{supplier_id}/onboarding",
             )
-
         except ApiNotFoundError as exc:
             raise OnboardingNotFoundError(
                 f"No onboarding workflow was found "
@@ -139,10 +139,14 @@ class SupplierApiClient:
     async def start_onboarding(
         self,
         supplier_id: str,
+        idempotency_key: UUID,
     ) -> StartOnboardingResponse:
         result = await self._request(
             method="POST",
             path=f"/api/v1/suppliers/{supplier_id}/onboarding",
+            headers={
+                "Idempotency-Key": str(idempotency_key),
+            },
         )
 
         return StartOnboardingResponse.model_validate(result)

@@ -1,10 +1,14 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_supplier.domain.entities.supplier_onboarding_workflow import (
     SupplierOnboardingWorkflow,
+)
+from api_supplier.domain.repositories.supplier_onboarding_workflow_repository import (
+    SupplierOnboardingWorkflowWriteConflictError,
 )
 from api_supplier.infrastructure.persistence.sqlalchemy.mappers.supplier_onboarding_workflow_mapper import (
     SupplierOnboardingWorkflowMapper,
@@ -28,6 +32,15 @@ class PostgreSQLSupplierOnboardingWorkflowRepository:
         self._session.add(
             SupplierOnboardingWorkflowMapper.to_model(workflow)
         )
+        try:
+            # Flush here so unique-constraint conflicts are surfaced at the
+            # repository boundary while the transaction is still controlled
+            # by the Unit of Work.
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise SupplierOnboardingWorkflowWriteConflictError(
+                "Supplier onboarding workflow insert conflicted with an existing row."
+            ) from exc
 
     async def get_by_id(
         self,
@@ -37,6 +50,21 @@ class PostgreSQLSupplierOnboardingWorkflowRepository:
             SupplierOnboardingWorkflowModel,
             workflow_id,
         )
+        if model is None:
+            return None
+        return SupplierOnboardingWorkflowMapper.to_domain(model)
+
+    async def get_by_idempotency_key(
+        self,
+        idempotency_key: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        result = await self._session.execute(
+            select(SupplierOnboardingWorkflowModel).where(
+                SupplierOnboardingWorkflowModel.idempotency_key
+                == idempotency_key
+            )
+        )
+        model = result.scalar_one_or_none()
         if model is None:
             return None
         return SupplierOnboardingWorkflowMapper.to_domain(model)
@@ -87,7 +115,7 @@ class PostgreSQLSupplierOnboardingWorkflowRepository:
 
         return SupplierOnboardingWorkflowMapper.to_domain(
             model
-        )        
+        )
 
 
 class InMemorySupplierOnboardingWorkflowRepository:
@@ -98,6 +126,14 @@ class InMemorySupplierOnboardingWorkflowRepository:
         self,
         workflow: SupplierOnboardingWorkflow,
     ) -> None:
+        # Mirrors the DB uniqueness guarantee closely enough for unit tests.
+        existing = await self.get_by_idempotency_key(
+            workflow.idempotency_key
+        )
+        if existing is not None:
+            raise SupplierOnboardingWorkflowWriteConflictError(
+                "Idempotency key already exists."
+            )
         self._workflows[workflow.workflow_id] = workflow
 
     async def get_by_id(
@@ -105,6 +141,19 @@ class InMemorySupplierOnboardingWorkflowRepository:
         workflow_id: UUID,
     ) -> SupplierOnboardingWorkflow | None:
         return self._workflows.get(workflow_id)
+
+    async def get_by_idempotency_key(
+        self,
+        idempotency_key: UUID,
+    ) -> SupplierOnboardingWorkflow | None:
+        return next(
+            (
+                workflow
+                for workflow in self._workflows.values()
+                if workflow.idempotency_key == idempotency_key
+            ),
+            None,
+        )
 
     async def update(
         self,
@@ -128,4 +177,4 @@ class InMemorySupplierOnboardingWorkflowRepository:
         return max(
             workflows,
             key=lambda workflow: workflow.created_at,
-        )        
+        )

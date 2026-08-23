@@ -17,6 +17,7 @@ class SupplierOnboardingWorkflowMapper:
         return SupplierOnboardingWorkflowModel(
             workflow_id=workflow.workflow_id,
             correlation_id=workflow.correlation_id,
+            idempotency_key=workflow.idempotency_key,
             supplier_id=workflow.supplier_id,
             status=workflow.status.value,
             service_now_ticket_id=workflow.service_now_ticket_id,
@@ -34,6 +35,7 @@ class SupplierOnboardingWorkflowMapper:
         return SupplierOnboardingWorkflow(
             workflow_id=model.workflow_id,
             correlation_id=model.correlation_id,
+            idempotency_key=model.idempotency_key,
             supplier_id=model.supplier_id,
             status=SupplierOnboardingStatus(model.status),
             service_now_ticket_id=model.service_now_ticket_id,

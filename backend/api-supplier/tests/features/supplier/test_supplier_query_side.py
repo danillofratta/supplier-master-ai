@@ -86,7 +86,8 @@ async def test_get_latest_onboarding_for_supplier() -> None:
     await uow.suppliers.add(supplier)
 
     workflow = SupplierOnboardingWorkflow.start(
-        supplier_id=supplier.supplier_id
+        supplier_id=supplier.supplier_id,
+        idempotency_key=uuid4(),
     )
     await uow.onboarding_workflows.add(workflow)
 

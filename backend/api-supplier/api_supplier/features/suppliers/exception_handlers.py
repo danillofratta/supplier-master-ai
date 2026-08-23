@@ -20,6 +20,7 @@ from api_supplier.features.suppliers.onboarding_workflow.exceptions import (
     SupplierNotFoundForOnboardingError,
     SupplierOnboardingAlreadyStartedError,
     SupplierOnboardingForSupplierNotFoundError,
+    SupplierOnboardingIdempotencyConflictError,
     SupplierOnboardingWorkflowNotFoundError,
 )
 from api_supplier.features.policies.ingest.handler import EmptyPolicyContentError
@@ -125,6 +126,24 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": "onboarding_not_found",
                 "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(SupplierOnboardingIdempotencyConflictError)
+    async def handle_onboarding_idempotency_conflict(
+        request: Request,
+        exc: SupplierOnboardingIdempotencyConflictError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "code": "idempotency_key_conflict",
+                "message": str(exc),
+                "details": {
+                    "idempotency_key": str(exc.idempotency_key),
+                    "existing_supplier_id": str(exc.existing_supplier_id),
+                    "requested_supplier_id": str(exc.requested_supplier_id),
+                },
             },
         )
 

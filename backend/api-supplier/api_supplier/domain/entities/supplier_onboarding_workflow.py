@@ -17,8 +17,9 @@ def utc_now() -> datetime:
 @dataclass
 class SupplierOnboardingWorkflow:
     correlation_id: UUID
+    idempotency_key: UUID
     supplier_id: UUID
-    workflow_id: UUID    
+    workflow_id: UUID
     status: SupplierOnboardingStatus
     service_now_ticket_id: str | None = None
     sap_business_partner_id: str | None = None
@@ -31,9 +32,11 @@ class SupplierOnboardingWorkflow:
     def start(
         cls,
         supplier_id: UUID,
+        idempotency_key: UUID,
     ) -> "SupplierOnboardingWorkflow":
         return cls(
             correlation_id=uuid4(),
+            idempotency_key=idempotency_key,
             supplier_id=supplier_id,
             workflow_id=uuid4(),
             status=SupplierOnboardingStatus.PENDING,
