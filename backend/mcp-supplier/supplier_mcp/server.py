@@ -1,10 +1,14 @@
 from mcp.server import MCPServer
+from supplier_mcp.exceptions import (
+    ConfirmationRequiredError,
+)
 from supplier_mcp.api_client import SupplierApiClient
 from supplier_mcp.models import (
     OnboardingStatusResponse,
     SupplierAnalysisResponse,
     SupplierResponse,
     SupplierListResponse,
+    StartOnboardingResponse,
 )
 
 api_client = SupplierApiClient(base_url="http://localhost:8000")
@@ -102,4 +106,29 @@ def investigate_supplier(
 
         Do not modify the supplier.
         """
+
+@mcp.tool()
+async def start_supplier_onboarding(
+    supplier_id: str,
+    confirmed: bool = False,
+) -> StartOnboardingResponse:
+    """
+    Start the governed supplier onboarding workflow.
+
+    This operation changes system state and may initiate
+    human review and SAP synchronization.
+
+    Set confirmed=true only after explicit user approval.
+    """
+
+    if not confirmed:
+        raise ConfirmationRequiredError(
+            "Starting supplier onboarding changes system state "
+            "and may initiate human review and SAP synchronization. "
+            "Explicit confirmation is required."
+        )
+
+    return await api_client.start_onboarding(
+        supplier_id=supplier_id
+    )
 

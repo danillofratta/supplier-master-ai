@@ -12,3 +12,6 @@ class SupplierNotFoundError(Exception):
 
 class OnboardingNotFoundError(Exception):
     """Raised when an onboarding workflow does not exist."""
+
+class ConfirmationRequiredError(Exception):
+    """Raised when a mutating MCP operation was not explicitly confirmed."""    

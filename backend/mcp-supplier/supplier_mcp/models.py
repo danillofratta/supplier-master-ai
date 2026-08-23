@@ -71,3 +71,8 @@ class OnboardingStatusResponse(BaseModel):
 
     created_at: datetime
     updated_at: datetime    
+
+class StartOnboardingResponse(BaseModel):
+    onboarding_workflow_id: UUID
+    supplier_id: UUID
+    status: str    

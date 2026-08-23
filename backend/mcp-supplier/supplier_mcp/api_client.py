@@ -2,7 +2,13 @@ from asyncio import timeout
 
 import httpx
 from uuid import uuid4
-from supplier_mcp.models import OnboardingStatusResponse, SupplierAnalysisResponse, SupplierResponse, SupplierListResponse
+from supplier_mcp.models import (
+    OnboardingStatusResponse,
+    SupplierAnalysisResponse,
+    SupplierResponse,
+    SupplierListResponse,
+    StartOnboardingResponse,
+)
 from supplier_mcp.exceptions import (
     SupplierApiError,
     ApiNotFoundError,
@@ -129,3 +135,14 @@ class SupplierApiClient:
             ) from exc
 
         return OnboardingStatusResponse.model_validate(result)
+
+    async def start_onboarding(
+        self,
+        supplier_id: str,
+    ) -> StartOnboardingResponse:
+        result = await self._request(
+            method="POST",
+            path=f"/api/v1/suppliers/{supplier_id}/onboarding",
+        )
+
+        return StartOnboardingResponse.model_validate(result)
