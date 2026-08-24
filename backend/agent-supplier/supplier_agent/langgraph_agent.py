@@ -5,6 +5,9 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_aws import ChatBedrockConverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.memory import InMemorySaver
+from supplier_agent.tools import (
+    prepare_tools,
+)
 
 
 SYSTEM_PROMPT = """
@@ -21,10 +24,15 @@ Rules:
 - Persisted workflow state is the source of truth for workflow execution.
 - If tool results conflict, explicitly report the inconsistency instead of guessing.
 - Never claim that an operation was executed unless a tool result confirms it.
-- Never recommend approve_supplier_review or reject_supplier_review unless
-  the onboarding workflow is waiting for human review.
-- Never recommend starting onboarding when a completed or active workflow
-  already exists unless the backend explicitly allows it.
+
+- Do NOT ask the user for confirmation yourself before requesting a tool.
+- If the user requests a state-changing operation, issue the appropriate tool call.
+- Human approval for state-changing tools is handled by the application through HumanInTheLoopMiddleware.
+- Do not set, simulate, or infer human approval in your response.
+
+- If a state-changing tool fails, never call that tool again automatically.
+- Report the tool failure to the user and stop.
+- A retry of a state-changing operation requires a new explicit user request.
 """
 
 
@@ -35,10 +43,15 @@ async def build_agent():
                 "transport": "http",
                 "url": "http://127.0.0.1:8010/mcp",
             }
-        }
+        },
+        handle_tool_errors=False,
     )
 
-    tools = await mcp_client.get_tools()
+    mcp_tools = await mcp_client.get_tools()
+
+    tools = prepare_tools(
+        mcp_tools
+    )
 
     model = ChatBedrockConverse(
         model=os.environ["BEDROCK_MODEL_ID"],

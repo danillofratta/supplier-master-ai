@@ -15,19 +15,16 @@ async def main() -> None:
         }
     }
 
+    user_message = input(
+        "\nWhat do you want the Supplier Agent to do?\n> "
+    )
+
     result = await agent.ainvoke(
         {
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        "Start onboarding for supplier"
-                        # "Investigate supplier "
-                        "80fef657-2254-4750-bacc-f308f833a71c. "
-                        # "Tell me its supplier information, "
-                        # "AI risk assessment, onboarding status "
-                        # "and recommended next action."
-                    ),
+                    "content": user_message
                 }
             ]
         },
@@ -114,7 +111,7 @@ async def _handle_interrupt(
                 }
             )
 
-    return await agent.ainvoke(
+    result = await agent.ainvoke(
         Command(
             resume={
                 "decisions": decisions,
@@ -124,6 +121,38 @@ async def _handle_interrupt(
         version="v2",
     )
 
+    _print_tool_results(result)
+
+    return result
+
+def _print_tool_results(result) -> None:
+    messages = result.value.get(
+        "messages",
+        []
+    )
+
+    print()
+    print("TOOL RESULTS AFTER APPROVAL")
+
+    for message in messages:
+        message_type = getattr(
+            message,
+            "type",
+            None,
+        )
+
+        if message_type != "tool":
+            continue
+
+        print(
+            f"Tool: {getattr(message, 'name', None)}"
+        )
+        print(
+            f"Status: {getattr(message, 'status', None)}"
+        )
+        print(
+            f"Content: {message.content}"
+        )
 
 def _extract_text(
     message,

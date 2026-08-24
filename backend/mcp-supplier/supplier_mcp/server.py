@@ -155,10 +155,8 @@ async def start_supplier_onboarding(
 
     This operation changes system state and may initiate
     human review and SAP synchronization.
-
-    Set confirmed=true only after explicit user approval.
     """
-    
+
     return await api_client.start_onboarding(
         supplier_id=supplier_id,
         idempotency_key=idempotency_key
