@@ -76,3 +76,8 @@ class StartOnboardingResponse(BaseModel):
     onboarding_workflow_id: UUID
     supplier_id: UUID
     status: str    
+
+class SupplierReviewDecisionResponse(BaseModel):
+    workflow_id: UUID
+    supplier_id: UUID
+    status: str

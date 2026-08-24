@@ -13,6 +13,7 @@ from supplier_mcp.models import (
     SupplierResponse,
     SupplierListResponse,
     StartOnboardingResponse,
+    SupplierReviewDecisionResponse,
 )
 
 api_client = SupplierApiClient(base_url="http://localhost:8000")
@@ -168,5 +169,74 @@ async def start_supplier_onboarding(
     return await api_client.start_onboarding(
         supplier_id=supplier_id,
         idempotency_key=idempotency_key
+    )
+
+@mcp.tool(
+        title="Approve Supplier Review",
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+)
+async def approve_supplier_review(
+    supplier_id: str,
+    confirmed: bool = False,
+) -> SupplierReviewDecisionResponse:
+    """
+    Approve a supplier that is waiting for human review.
+
+    Approval changes workflow state and may schedule
+    synchronization with SAP.
+
+    Explicit user confirmation is required.
+    """
+
+    if not confirmed:
+        raise ConfirmationRequiredError(
+            "Approving supplier review changes system state "
+            "and may initiate SAP synchronization. "
+            "Explicit confirmation is required."
+        )
+
+    return await api_client.decide_supplier_review(
+        supplier_id=supplier_id,
+        decision="approve",
+    )
+
+@mcp.tool(
+        title="Reject Supplier Review",
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=True,
+            idempotent_hint=False,
+            open_world_hint=False,
+        ),
+)
+async def reject_supplier_review(
+    supplier_id: str,
+    reason: str,
+    confirmed: bool = False,
+) -> SupplierReviewDecisionResponse:
+    """
+    Reject a supplier that is waiting for human review.
+
+    Rejection stops the current onboarding workflow.
+
+    A reason and explicit user confirmation are required.
+    """"
+
+    if not confirmed:
+        raise ConfirmationRequiredError(
+            "Rejecting supplier review changes system state "
+            "and may initiate SAP synchronization. "
+            "Explicit confirmation is required."
+        )
+
+    return await api_client.decide_supplier_review(
+        supplier_id=supplier_id,
+        decision="reject",
+        reason=reason,
     )
 

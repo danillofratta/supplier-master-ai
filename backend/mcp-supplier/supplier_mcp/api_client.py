@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from uuid import UUID, uuid4
 
 import httpx
+from pyparsing import Literal
 
 from supplier_mcp.exceptions import (
     ApiNotFoundError,
@@ -15,6 +16,7 @@ from supplier_mcp.models import (
     SupplierAnalysisResponse,
     SupplierListResponse,
     SupplierResponse,
+    SupplierReviewDecisionResponse,
 )
 
 
@@ -33,6 +35,7 @@ class SupplierApiClient:
         method: str,
         path: str,
         headers: Mapping[str, str] | None = None,
+        json_body: dict | None = None,
     ) -> dict | list:
         correlation_id = str(uuid4())
         url = f"{self._base_url}{path}"
@@ -53,6 +56,7 @@ class SupplierApiClient:
                     method=method,
                     url=url,
                     headers=request_headers,
+                    json=json_body
                 )
         except httpx.RequestError as exc:
             raise SupplierApiError(
@@ -150,3 +154,25 @@ class SupplierApiClient:
         )
 
         return StartOnboardingResponse.model_validate(result)
+
+    async def decide_supplier_review(
+        self,
+        supplier_id: str,
+        decision: Literal["approve", "reject"],
+        reason: str | None = None,
+    ) -> SupplierReviewDecisionResponse:
+        result = await self._request(
+            method="POST",
+            path=(
+                f"/api/v1/suppliers/{supplier_id}"
+                f"/onboarding/review-decision"
+            ),
+            json_body={
+                "decision": decision,
+                "reason": reason,
+            },
+        )
+
+        return SupplierReviewDecisionResponse.model_validate(
+            result
+        )
