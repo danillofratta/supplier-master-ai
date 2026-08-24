@@ -4,7 +4,8 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_aws import ChatBedrockConverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.checkpoint.memory import InMemorySaver
+#from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from supplier_agent.tools import (
     prepare_tools,
 )
@@ -36,7 +37,7 @@ Rules:
 """
 
 
-async def build_agent():
+async def build_agent(checkpointer):
     mcp_client = MultiServerMCPClient(
         {
             "supplier": {
@@ -97,7 +98,7 @@ async def build_agent():
                 ),
             ),
         ],
-        checkpointer=InMemorySaver(),
+        checkpointer=checkpointer,
     )
 
     return agent
