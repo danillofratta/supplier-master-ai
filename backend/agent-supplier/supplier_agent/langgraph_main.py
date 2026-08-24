@@ -3,6 +3,7 @@ import sys
 from uuid import uuid4
 
 from langgraph.types import Command
+from networkx import config
 
 from supplier_agent.langgraph_agent import build_agent
 import os
@@ -31,18 +32,57 @@ async def main() -> None:
             checkpointer
         )
 
-        await run_cli(agent)
+        await run_cli(agent)        
 
     agent = await build_agent()
 
 async def run_cli(agent) -> None:
+    thread_id = _get_thread_id()
+
     config = {
         "configurable": {
-            "thread_id": str(uuid4()),
+            "thread_id": thread_id,
         }
     }
 
+    state = await agent.aget_state(
+        config
+    )
+
+    pending_interrupts = [
+        interrupt
+        for task in state.tasks
+        for interrupt in task.interrupts
+    ]    
+
+    if pending_interrupts:
+        print()
+        print(
+            "This conversation has a pending approval."
+        )
+
+        result = await _resume_pending_interrupt(
+            agent=agent,
+            config=config,
+            interrupts=pending_interrupts,
+        )
+
+        if result is not None:
+            final_message = result.value[
+                "messages"
+            ][-1]
+
+            print()
+            print("Agent:")
+            print(
+                _extract_text(
+                    final_message
+                )
+            )    
+
+    print()
     print("Supplier Master AI Agent")
+    print(f"Thread ID: {thread_id}")
     print("Type 'exit' to quit.")
 
     while True:
@@ -88,6 +128,71 @@ async def run_cli(agent) -> None:
                 final_message
             )
         )        
+
+async def _resume_pending_interrupt(
+    agent,
+    config,
+    interrupts,
+):
+    interrupt = interrupts[0]
+
+    print()
+    print("=" * 60)
+    print("PENDING HUMAN APPROVAL")
+    print("=" * 60)
+    print(interrupt.value)
+
+    answer = input(
+        "\nDo you approve this action? [y/N]: "
+    )
+
+    approved = (
+        answer.strip().lower()
+        in {"y", "yes"}
+    )
+
+    decision = (
+        {
+            "type": "approve",
+        }
+        if approved
+        else {
+            "type": "reject",
+            "message": (
+                "The user rejected this action."
+            ),
+        }
+    )
+
+    return await agent.ainvoke(
+        Command(
+            resume={
+                "decisions": [
+                    decision
+                ]
+            }
+        ),
+        config=config,
+        version="v2",
+    )        
+
+def _get_thread_id() -> str:
+    print()
+    print("Conversation")
+    print("1 - New conversation")
+    print("2 - Resume conversation")
+
+    option = input("> ").strip()
+
+    if option == "2":
+        thread_id = input(
+            "Thread ID: "
+        ).strip()
+
+        if thread_id:
+            return thread_id
+
+    return str(uuid4())        
 
 async def _handle_interrupt(
     agent,
