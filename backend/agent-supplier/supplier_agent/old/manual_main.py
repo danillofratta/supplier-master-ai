@@ -41,6 +41,5 @@ async def main() -> None:
     print("Agent response:")
     print(answer)
 
-
 if __name__ == "__main__":
     asyncio.run(main())

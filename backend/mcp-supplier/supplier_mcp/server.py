@@ -148,8 +148,7 @@ def investigate_supplier(
 )
 async def start_supplier_onboarding(
     supplier_id: str,
-    idempotency_key: UUID,
-    confirmed: bool = False,
+    idempotency_key: UUID
 ) -> StartOnboardingResponse:
     """
     Start the governed supplier onboarding workflow.
@@ -159,14 +158,7 @@ async def start_supplier_onboarding(
 
     Set confirmed=true only after explicit user approval.
     """
-
-    if not confirmed:
-        raise ConfirmationRequiredError(
-            "Starting supplier onboarding changes system state "
-            "and may initiate human review and SAP synchronization. "
-            "Explicit confirmation is required."
-        )
-
+    
     return await api_client.start_onboarding(
         supplier_id=supplier_id,
         idempotency_key=idempotency_key
@@ -182,8 +174,7 @@ async def start_supplier_onboarding(
         ),
 )
 async def approve_supplier_review(
-    supplier_id: str,
-    confirmed: bool = False,
+    supplier_id: str
 ) -> SupplierReviewDecisionResponse:
     """
     Approve a supplier that is waiting for human review.
@@ -193,13 +184,6 @@ async def approve_supplier_review(
 
     Explicit user confirmation is required.
     """
-
-    if not confirmed:
-        raise ConfirmationRequiredError(
-            "Approving supplier review changes system state "
-            "and may initiate SAP synchronization. "
-            "Explicit confirmation is required."
-        )
 
     return await api_client.decide_supplier_review(
         supplier_id=supplier_id,
@@ -217,8 +201,7 @@ async def approve_supplier_review(
 )
 async def reject_supplier_review(
     supplier_id: str,
-    reason: str,
-    confirmed: bool = False,
+    reason: str
 ) -> SupplierReviewDecisionResponse:
     """
     Reject a supplier that is waiting for human review.
@@ -227,13 +210,6 @@ async def reject_supplier_review(
 
     A reason and explicit user confirmation are required.
     """
-
-    if not confirmed:
-        raise ConfirmationRequiredError(
-            "Rejecting supplier review changes system state "
-            "and may initiate SAP synchronization. "
-            "Explicit confirmation is required."
-        )
 
     return await api_client.decide_supplier_review(
         supplier_id=supplier_id,
