@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from uuid import UUID, uuid4
 
 import httpx
-from pyparsing import Literal
+import typing
 
 from supplier_mcp.exceptions import (
     ApiNotFoundError,
@@ -159,7 +159,7 @@ class SupplierApiClient:
     async def decide_supplier_review(
         self,
         supplier_id: str,
-        decision: Literal["approve", "reject"],
+        decision: typing.Literal["approve", "reject"],
         reason: str | None = None,
     ) -> SupplierReviewDecisionResponse:
         result = await self._request(

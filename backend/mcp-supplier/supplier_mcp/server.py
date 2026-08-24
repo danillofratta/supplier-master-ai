@@ -283,3 +283,13 @@ async def ingest_supplier_policy(
         version=version,
         effective_date=effective_date,
     )
+
+if __name__ == "__main__":
+    mcp.run(
+        transport="streamable-http",
+        host="127.0.0.1",
+        port=8010,
+        streamable_http_path="/mcp",
+        stateless_http=True,
+        json_response=True,
+    )
