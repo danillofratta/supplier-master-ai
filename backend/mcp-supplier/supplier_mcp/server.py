@@ -9,6 +9,7 @@ from supplier_mcp.exceptions import (
 from supplier_mcp.api_client import SupplierApiClient
 from supplier_mcp.models import (
     OnboardingStatusResponse,
+    PolicyIngestResponse,
     SupplierAnalysisResponse,
     SupplierResponse,
     SupplierListResponse,
@@ -225,7 +226,7 @@ async def reject_supplier_review(
     Rejection stops the current onboarding workflow.
 
     A reason and explicit user confirmation are required.
-    """"
+    """
 
     if not confirmed:
         raise ConfirmationRequiredError(
@@ -240,3 +241,45 @@ async def reject_supplier_review(
         reason=reason,
     )
 
+@mcp.tool(
+    title="Ingest Supplier Policy ",
+    annotations=ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+)
+async def ingest_supplier_policy(
+    document_id: str,
+    title: str,
+    content: str,
+    policy_type: str,
+    version: str,
+    effective_date: str,
+    confirmed: bool = False,
+) -> PolicyIngestResponse:
+    """
+    Ingest or replace a supplier policy in the AI knowledge base.
+
+    The policy is chunked, embedded and indexed for use by
+    supplier RAG analysis.
+
+    This operation changes the AI knowledge base and requires
+    explicit user confirmation.
+    """
+        
+    if not confirmed:
+        raise ConfirmationRequiredError(
+            "Ingesting a supplier policy changes the AI knowledge base. "
+            "Explicit confirmation is required."
+        )
+
+    return await api_client.ingest_policy(
+        document_id=document_id,
+        title=title,
+        content=content,
+        policy_type=policy_type,
+        version=version,
+        effective_date=effective_date,
+    )

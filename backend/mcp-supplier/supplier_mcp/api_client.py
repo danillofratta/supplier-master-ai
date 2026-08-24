@@ -12,6 +12,7 @@ from supplier_mcp.exceptions import (
 )
 from supplier_mcp.models import (
     OnboardingStatusResponse,
+    PolicyIngestResponse,
     StartOnboardingResponse,
     SupplierAnalysisResponse,
     SupplierListResponse,
@@ -174,5 +175,31 @@ class SupplierApiClient:
         )
 
         return SupplierReviewDecisionResponse.model_validate(
+            result
+        )
+
+    async def ingest_policy(
+        self,
+        document_id: str,
+        title: str,
+        content: str,
+        policy_type: str,
+        version: str,
+        effective_date: str,
+    ) -> PolicyIngestResponse:
+        result = await self._request(
+            method="POST",
+            path="/api/v1/policies/ingest",
+            json_body={
+                "document_id": document_id,
+                "title": title,
+                "content": content,
+                "policy_type": policy_type,
+                "version": version,
+                "effective_date": effective_date,
+            },
+        )
+
+        return PolicyIngestResponse.model_validate(
             result
         )

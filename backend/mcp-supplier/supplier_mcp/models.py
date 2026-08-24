@@ -81,3 +81,8 @@ class SupplierReviewDecisionResponse(BaseModel):
     workflow_id: UUID
     supplier_id: UUID
     status: str
+
+class PolicyIngestResponse(BaseModel):
+    document_id: str
+    chunks_indexed: int
+    embedding_dimensions: int
