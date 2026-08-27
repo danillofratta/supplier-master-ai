@@ -3,9 +3,6 @@ from uuid import UUID
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
-from supplier_mcp.exceptions import (
-    ConfirmationRequiredError,
-)
 from supplier_mcp.api_client import SupplierApiClient
 from supplier_mcp.models import (
     OnboardingStatusResponse,
@@ -178,9 +175,8 @@ async def approve_supplier_review(
     Approve a supplier that is waiting for human review.
 
     Approval changes workflow state and may schedule
-    synchronization with SAP.
-
-    Explicit user confirmation is required.
+    synchronization with SAP. Human approval is enforced by
+    the agent runtime when this tool is used through LangGraph.
     """
 
     return await api_client.decide_supplier_review(
@@ -205,8 +201,8 @@ async def reject_supplier_review(
     Reject a supplier that is waiting for human review.
 
     Rejection stops the current onboarding workflow.
-
-    A reason and explicit user confirmation are required.
+    A business rejection reason is required. Human approval is
+    enforced by the agent runtime when used through LangGraph.
     """
 
     return await api_client.decide_supplier_review(
@@ -231,7 +227,6 @@ async def ingest_supplier_policy(
     policy_type: str,
     version: str,
     effective_date: str,
-    confirmed: bool = False,
 ) -> PolicyIngestResponse:
     """
     Ingest or replace a supplier policy in the AI knowledge base.
@@ -239,15 +234,9 @@ async def ingest_supplier_policy(
     The policy is chunked, embedded and indexed for use by
     supplier RAG analysis.
 
-    This operation changes the AI knowledge base and requires
-    explicit user confirmation.
+    This operation changes the AI knowledge base. Human approval
+    is enforced by the agent runtime when used through LangGraph.
     """
-        
-    if not confirmed:
-        raise ConfirmationRequiredError(
-            "Ingesting a supplier policy changes the AI knowledge base. "
-            "Explicit confirmation is required."
-        )
 
     return await api_client.ingest_policy(
         document_id=document_id,

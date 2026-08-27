@@ -741,3 +741,241 @@ code {
 .timeline-step.skipped .timeline-marker {
   border-style: dashed;
 }
+
+/* Agentic AI console ------------------------------------------------------ */
+.agent-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, .65fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.agent-chat-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.agent-thread-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #17304b;
+  background: rgba(5, 15, 28, .45);
+}
+
+.agent-thread-meta > div {
+  display: grid;
+  gap: 5px;
+}
+
+.agent-thread-meta span {
+  color: #7f96af;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.agent-runtime-badge {
+  border: 1px solid rgba(14, 165, 233, .3);
+  background: rgba(14, 165, 233, .07);
+  color: #7dd3fc !important;
+  border-radius: 999px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.agent-messages {
+  min-height: 470px;
+  max-height: 64vh;
+  overflow-y: auto;
+  padding: 22px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.agent-empty-state {
+  margin: auto;
+  max-width: 520px;
+  text-align: center;
+  color: #7f96af;
+  padding: 80px 24px;
+}
+
+.agent-empty-state strong {
+  color: #dbeafe;
+  font-size: 20px;
+}
+
+.agent-empty-state p {
+  line-height: 1.6;
+}
+
+.agent-message {
+  max-width: 82%;
+  border: 1px solid #1d3a55;
+  border-radius: 14px;
+  padding: 13px 15px;
+}
+
+.agent-message > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #7f96af;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.agent-message p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.agent-message-user {
+  justify-self: end;
+  background: rgba(37, 99, 235, .14);
+  border-color: rgba(59, 130, 246, .32);
+}
+
+.agent-message-assistant {
+  justify-self: start;
+  background: #081725;
+}
+
+.agent-approval-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(245, 158, 11, .45);
+  background: linear-gradient(180deg, rgba(120, 53, 15, .18), rgba(69, 26, 3, .12));
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.agent-approval-card h3 {
+  margin: 5px 0 6px;
+}
+
+.agent-approval-card p {
+  margin: 0;
+  color: #c4a878;
+  line-height: 1.5;
+}
+
+.agent-action-request {
+  border: 1px solid rgba(245, 158, 11, .25);
+  border-radius: 10px;
+  padding: 13px;
+  background: rgba(7, 17, 31, .58);
+}
+
+.agent-action-request pre {
+  margin: 10px 0 0;
+  padding: 11px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: #050d17;
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.agent-approval-note,
+.agent-side-panel label {
+  display: grid;
+  gap: 7px;
+  color: #aebed0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-approval-note input,
+.agent-side-panel input,
+.agent-composer textarea {
+  width: 100%;
+  border: 1px solid #23415c;
+  background: #081725;
+  color: white;
+  border-radius: 10px;
+  padding: 11px 12px;
+  outline: none;
+}
+
+.agent-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
+  padding: 18px 20px;
+  border-top: 1px solid #17304b;
+  background: rgba(5, 15, 28, .55);
+}
+
+.agent-composer textarea {
+  resize: vertical;
+  min-height: 74px;
+  line-height: 1.5;
+}
+
+.agent-side-panel {
+  position: sticky;
+  top: 86px;
+  display: grid;
+  gap: 15px;
+}
+
+.agent-side-panel h2,
+.agent-side-panel p {
+  margin: 0;
+}
+
+.agent-side-panel > p {
+  color: #8ea5bc;
+  line-height: 1.55;
+}
+
+.agent-capabilities {
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #17304b;
+}
+
+.agent-capabilities h3 {
+  font-size: 13px;
+}
+
+.agent-capabilities ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #9fb3c8;
+  line-height: 1.8;
+}
+
+@media (max-width: 1050px) {
+  .agent-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-side-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 700px) {
+  .agent-thread-meta,
+  .agent-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-thread-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-message {
+    max-width: 94%;
+  }
+}

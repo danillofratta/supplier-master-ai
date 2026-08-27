@@ -3,6 +3,13 @@
 -- Run:
 -- psql -U postgres -d postgres -f database\03_upgrade_existing.sql
 
+\connect postgres
+
+SELECT 'CREATE DATABASE supplier_agent_db'
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_database WHERE datname = 'supplier_agent_db'
+)\gexec
+
 \connect supplier_db
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

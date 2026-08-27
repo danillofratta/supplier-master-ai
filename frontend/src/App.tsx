@@ -19,6 +19,7 @@ import {
   SuppliersPage,
 } from "./pages/SuppliersPage";
 import { IngestPolicyPage } from "./pages/IngestPolicyPage";
+import { AgentPage } from "./pages/AgentPage";
 
 function App() {
   return (
@@ -32,6 +33,10 @@ function App() {
           <Route
             path="/suppliers"
             element={<SuppliersPage />}
+          />
+          <Route
+            path="/agent"
+            element={<AgentPage />}
           />
           <Route
             path="/suppliers/new"

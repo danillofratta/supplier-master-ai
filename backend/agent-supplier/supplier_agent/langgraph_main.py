@@ -3,11 +3,8 @@ import sys
 from uuid import uuid4
 
 from langgraph.types import Command
-from networkx import config
 
 from supplier_agent.langgraph_agent import build_agent
-import os
-
 from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
 )
@@ -32,9 +29,7 @@ async def main() -> None:
             checkpointer
         )
 
-        await run_cli(agent)        
-
-    agent = await build_agent()
+        await run_cli(agent)
 
 async def run_cli(agent) -> None:
     thread_id = _get_thread_id()

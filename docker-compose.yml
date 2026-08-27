@@ -160,6 +160,7 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: http://localhost:8000/api
+        VITE_AGENT_API_URL: http://localhost:8011/api
     ports:
       - "5173:80"
     depends_on:

@@ -244,6 +244,12 @@ export function SupplierDetailsPage() {
         </div>
 
         <div className="action-row">
+          <Link
+            className="button secondary"
+            to={`/agent?supplierId=${supplierId}`}
+          >
+            Investigate with Agent
+          </Link>
           <button className="button" onClick={runAnalysis} disabled={analyzing}>
             {analyzing ? "Analyzing..." : "Run AI Analysis"}
           </button>

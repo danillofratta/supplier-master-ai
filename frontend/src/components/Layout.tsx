@@ -38,6 +38,16 @@ export function Layout() {
           </NavLink>
 
           <NavLink
+            to="/agent"
+            className={({ isActive }) =>
+              isActive ? "active" : ""
+            }
+          >
+            <span>✦</span>
+            AI Agent
+          </NavLink>
+
+          <NavLink
             to="/policies/ingest"
             className={({ isActive }) =>
               isActive ? "active" : ""

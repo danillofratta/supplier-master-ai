@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "supplier-master-ai-agent"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.11"
 
 dependencies = [
@@ -12,8 +12,26 @@ dependencies = [
     "langgraph",
     "langchain-aws",
     "langchain-mcp-adapters",
+    "langgraph-checkpoint-postgres",
     "mcp[cli]",
     "boto3",
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.34,<1.0",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.7,<3.0",
+    "psycopg[binary]>=3.2,<4.0",
+]
+
+[project.optional-dependencies]
+openai = [
+    "langchain-openai",
+]
+gemini = [
+    "langchain-google-genai",
+]
+providers = [
+    "langchain-openai",
+    "langchain-google-genai",
 ]
 
 [tool.setuptools.packages.find]

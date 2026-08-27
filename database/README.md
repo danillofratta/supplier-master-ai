@@ -29,4 +29,5 @@ Database ownership:
 
 - `supplier_db`: API Supplier + Supplier Outbox worker + SAP result consumer.
 - `sap_integration_db`: SAP consumer + SAP Outbox worker.
+- `supplier_agent_db`: LangGraph checkpoints for Agent conversations and HITL interrupts. LangGraph creates its internal tables with `checkpointer.setup()`.
 - No cross-database foreign keys are used.

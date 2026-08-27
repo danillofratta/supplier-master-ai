@@ -1,20 +1,16 @@
-import os
-
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langchain_aws import ChatBedrockConverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
-#from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from supplier_agent.tools import (
-    prepare_tools,
-)
+
+from supplier_agent.model_factory import build_chat_model
+from supplier_agent.settings import get_settings
+from supplier_agent.tools import prepare_tools
 
 
 SYSTEM_PROMPT = """
 You are the Supplier Master AI Agent.
 
-Use the available MCP tools as the source of truth.
+Use the available MCP-backed tools as the source of truth.
 
 Rules:
 
@@ -25,43 +21,44 @@ Rules:
 - Persisted workflow state is the source of truth for workflow execution.
 - If tool results conflict, explicitly report the inconsistency instead of guessing.
 - Never claim that an operation was executed unless a tool result confirms it.
+- For a comprehensive investigation, prefer the investigate_supplier tool.
+- Separate facts from AI recommendations in investigation summaries.
+- If one investigation source is unavailable, report that limitation explicitly.
+- Never suggest creating a new supplier, resetting/deleting a workflow, changing
+  supplier status, or another operation unless that capability exists in tools.
 
 - Do NOT ask the user for confirmation yourself before requesting a tool.
 - If the user requests a state-changing operation, issue the appropriate tool call.
-- Human approval for state-changing tools is handled by the application through HumanInTheLoopMiddleware.
+- Human approval for state-changing tools is handled by the application through
+  HumanInTheLoopMiddleware.
 - Do not set, simulate, or infer human approval in your response.
 
 - If a state-changing tool fails, never call that tool again automatically.
 - Report the tool failure to the user and stop.
 - A retry of a state-changing operation requires a new explicit user request.
+- A timeout or HTTP 5xx response from a state-changing tool does not prove that
+  the operation did not happen. Report the outcome as uncertain when appropriate.
 """
 
 
 async def build_agent(checkpointer):
+    settings = get_settings()
+
     mcp_client = MultiServerMCPClient(
         {
             "supplier": {
                 "transport": "http",
-                "url": "http://127.0.0.1:8010/mcp",
+                "url": settings.supplier_mcp_url,
             }
         },
         handle_tool_errors=False,
     )
 
     mcp_tools = await mcp_client.get_tools()
+    tools = prepare_tools(mcp_tools)
+    model = build_chat_model(settings)
 
-    tools = prepare_tools(
-        mcp_tools
-    )
-
-    model = ChatBedrockConverse(
-        model=os.environ["BEDROCK_MODEL_ID"],
-        region_name=os.environ["AWS_REGION"],
-        temperature=0.1,
-        max_tokens=1500,
-    )
-
-    agent = create_agent(
+    return create_agent(
         model=model,
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
@@ -100,5 +97,3 @@ async def build_agent(checkpointer):
         ],
         checkpointer=checkpointer,
     )
-
-    return agent

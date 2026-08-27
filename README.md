@@ -4,6 +4,18 @@
 
 Supplier Master AI is a reference implementation of a modern enterprise Supplier Master onboarding platform.
 
+The current version also includes a **stateful Supplier AI Agent** built with LangChain/LangGraph, MCP tools, PostgreSQL checkpoints and web-based Human-in-the-Loop approvals.
+
+### Documentation
+
+- [Business Overview](docs/BUSINESS_OVERVIEW.md)
+- [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
+- [Agent API and Web UI](docs/AGENT_API_AND_UI.md)
+- [Messaging Flow](docs/microservices-messaging.md)
+- [Observability](OBSERVABILITY.md)
+- [Local Runtime Guide](README-RUN-LOCAL.md)
+
+
 The system demonstrates how Generative AI can assist complex business workflows while preserving deterministic business rules, auditability, resiliency and human control.
 
 Instead of allowing an LLM to directly execute enterprise actions, the platform combines:
@@ -301,13 +313,15 @@ Responsibilities include idempotent SAP request processing, ERP integration and 
 backend/
 ├── api-gateway/
 ├── api-supplier/
+├── mcp-supplier/
+├── agent-supplier/
 ├── worker-supplier-outbox/
 ├── consumer-sap/
 ├── worker-sap-outbox/
 └── consumer-supplier-sap-result/
 
 frontend/
-└── React + TypeScript
+└── React + TypeScript operations console + AI Agent UI
 ```
 
 ---
@@ -340,6 +354,39 @@ flowchart LR
 
     SUP --> SN[ServiceNow Adapter]
 ```
+
+---
+
+## Supplier AI Agent
+
+The project includes a LangChain/LangGraph Agent exposed through a FastAPI Agent API and a React chat interface.
+
+```mermaid
+flowchart LR
+    UI[React Agent UI] --> AA[Agent API :8011]
+    AA --> LG[LangGraph]
+    LG --> CP[(PostgreSQL checkpoints)]
+    LG --> LLM[Chat Model]
+    LG --> MCP[MCP Supplier :8010]
+    MCP --> GW[API Gateway :8000]
+    GW --> SUP[Supplier API :8001]
+```
+
+The Agent supports multi-turn conversations, comprehensive supplier investigations and governed state-changing operations. Critical writes are paused by `HumanInTheLoopMiddleware` and resumed only after an explicit approve/reject decision from the application.
+
+A composite read-only investigation capability collects:
+
+```text
+Supplier master data
++
+RAG / AI risk analysis
++
+Persisted onboarding workflow state
+```
+
+The Agent model provider is configurable. **Amazon Bedrock remains the default and existing working path**; OpenAI and Gemini are optional alternatives loaded through provider-specific extras.
+
+See [Agent API and Web UI](docs/AGENT_API_AND_UI.md) for endpoints, configuration and local run instructions.
 
 ---
 
@@ -455,11 +502,14 @@ to correlate the complete onboarding workflow independently of individual techni
 |---|---|
 | Backend | Python 3.11, FastAPI |
 | Frontend | React, TypeScript, Vite |
-| AI | Amazon Bedrock |
+| Supplier AI | Amazon Bedrock |
+| Agent orchestration | LangChain, LangGraph, MCP |
+| Agent default model provider | Amazon Bedrock |
+| Optional Agent providers | OpenAI, Gemini |
 | LLM | GPT-OSS through Bedrock |
 | Embeddings | Amazon Titan Embeddings |
 | RAG | OpenSearch Vector Search |
-| Database | PostgreSQL |
+| Database | PostgreSQL (Supplier, SAP Integration, Agent checkpoints) |
 | Messaging | AWS SQS |
 | Persistence | SQLAlchemy |
 | Architecture | DDD, CQRS / Vertical Slice |
@@ -494,6 +544,15 @@ Services are available at:
 | Supplier API Swagger | `http://localhost:8001/docs` |
 | Jaeger | `http://localhost:16686` |
 | PostgreSQL | `localhost:5432` |
+
+The MCP Supplier server (`:8010`) and Agent API (`:8011`) can be run locally from their backend projects. The Agent API is started with:
+
+```powershell
+cd backend\agent-supplier
+python -m supplier_agent.api_main
+```
+
+The frontend reads `VITE_AGENT_API_URL` (default `http://localhost:8011/api`).
 
 ---
 
@@ -626,9 +685,13 @@ Generative AI
 +
 RAG
 +
-Responsible AI
+MCP
 +
-Human-in-the-Loop
+LangGraph Agents
++
+Persistent Human-in-the-Loop
++
+Responsible AI
 +
 DDD
 +
