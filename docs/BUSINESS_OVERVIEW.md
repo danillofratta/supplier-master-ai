@@ -2,98 +2,94 @@
 
 ## Executive summary
 
-Supplier Master AI is a reference implementation of an enterprise supplier-onboarding platform that combines **Generative AI, Retrieval-Augmented Generation (RAG), Human-in-the-Loop governance, deterministic workflow rules, event-driven integration and SAP synchronization**.
+Supplier Master AI demonstrates how an enterprise can accelerate supplier onboarding with Generative AI while preserving **human control, deterministic business rules, auditability and resilient ERP integration**.
 
-The business objective is not to replace supplier governance with an LLM. The objective is to reduce manual analysis while keeping critical decisions **controlled, explainable, auditable and recoverable**.
+The objective is not to let an LLM become a system-of-record authority. AI is used to interpret policy context and produce a structured recommendation; application rules and human governance decide whether a critical workflow may continue.
 
 ```mermaid
 flowchart LR
-    S[Supplier submitted] --> P[Corporate policies]
-    P --> AI[AI-assisted risk analysis]
+    S[Supplier submitted] --> K[Corporate policy knowledge]
+    K --> AI[AI-assisted analysis]
     AI --> R[Deterministic rules]
-    R -->|safe| SAP[SAP synchronization]
+    R -->|automatic path| I[ERP integration workflow]
     R -->|review required| H[Human review]
-    H -->|approve| SAP
-    H -->|reject| X[Onboarding rejected]
+    H -->|approve| I
+    H -->|reject| X[Rejected]
 ```
 
 ## Business problem
 
-Supplier onboarding in large companies commonly spans procurement, compliance, finance, ERP teams and external systems. The information required to approve a supplier is often distributed across master data and policy documents, while the final ERP action must remain deterministic and auditable.
+Large-company supplier onboarding often spans procurement, compliance, finance and ERP operations. Common challenges include:
 
-Typical pain points include:
-
-- manual interpretation of onboarding and compliance policies;
-- slow review of incomplete or suspicious supplier data;
-- inconsistent decisions between reviewers;
-- fragile synchronous integrations with ERP systems;
-- duplicate processing during retries;
-- poor visibility across long-running onboarding workflows;
-- difficulty proving why a supplier was approved, rejected or sent to review.
+- policies stored in documents rather than executable rules;
+- repetitive manual interpretation of supplier data and policy requirements;
+- incomplete or suspicious information that needs contextual review;
+- inconsistent reviewer decisions;
+- fragile synchronous ERP calls;
+- duplicate processing after retries/timeouts;
+- poor visibility across long-running workflows;
+- difficulty explaining why a supplier was approved, rejected or escalated.
 
 ## Business capabilities
 
-### 1. Supplier master-data management
+### Supplier master-data operations
 
-Operators can create and inspect supplier master data through the React operations console.
+Operators can create, list and inspect supplier master data from the React operations console.
 
-### 2. AI-assisted policy analysis
+### Policy knowledge-base management
 
-The Supplier API retrieves relevant policy chunks from OpenSearch and asks an LLM to produce a structured risk recommendation. The AI result is decision support, not final authorization.
+Operators can ingest text/Markdown supplier policies. The backend chunks the content, creates Titan embeddings and indexes policy chunks in OpenSearch.
 
-### 3. Policy knowledge-base management
+### AI-assisted supplier analysis
 
-The existing **Policy Ingest** screen lets an operator provide policy text or load a text/Markdown file. The backend chunks the document, creates Titan embeddings and indexes the policy in OpenSearch for later RAG retrieval.
+The Supplier API retrieves relevant policy context and asks the configured Bedrock model for a structured risk analysis. AI output is decision support, not final authorization.
 
-### 4. Governed onboarding workflow
+### Governed onboarding
 
-The platform starts an onboarding workflow and applies deterministic rules around confidence, missing documents and risk. A workflow can continue automatically or move to human review.
+The persisted onboarding workflow applies deterministic conditions around AI confidence, missing documents and risk. The workflow can proceed or enter `waiting_human_review`.
 
-### 5. Human review
+### Business Human-in-the-Loop
 
-A reviewer can approve or reject a supplier waiting for review. Human review is available in the existing supplier screen and, for agent-generated write operations, through the new LangGraph Human-in-the-Loop approval experience.
+A reviewer can approve or reject an onboarding that requires review. Approval resumes the deterministic workflow; rejection terminates it with a reason.
 
-### 6. Supplier AI Agent
+### Supplier AI Agent
 
-The Agent provides a natural-language interface for operations and investigation. It can retrieve supplier facts, run RAG analysis, inspect persisted onboarding state and propose governed actions through MCP tools.
+The Agent provides a natural-language investigation/operations interface. It can query Supplier facts, request RAG analysis, inspect onboarding state and propose available state changes through MCP capabilities.
 
-A write operation is never executed simply because the LLM requested it:
+State-changing Agent tool requests are separately protected by LangGraph Human-in-the-Loop approval.
 
-```mermaid
-flowchart TD
-    U[User request] --> A[AI Agent]
-    A --> T[State-changing tool proposal]
-    T --> I[LangGraph interrupt]
-    I --> P[(PostgreSQL checkpoint)]
-    P --> H{Human decision}
-    H -->|Approve| M[MCP tool execution]
-    H -->|Reject| E[Stop action]
-    M --> B[Deterministic backend]
-```
+### Comprehensive investigation
 
-### 7. Full supplier investigation
-
-The Agent exposes a dedicated read-only investigation capability that combines three authoritative views:
+The Agent's read-only `investigate_supplier` capability combines three authoritative views:
 
 1. supplier master data;
-2. AI/RAG risk assessment;
+2. AI/RAG analysis;
 3. persisted onboarding workflow state.
 
-The Agent must surface inconsistencies rather than invent a resolution. For example, supplier status and onboarding workflow status are intentionally treated as separate concepts.
+If one source fails, the Agent must report it as unavailable. If facts conflict, the system prompt requires the Agent to surface the inconsistency instead of inventing a resolution.
 
-### 8. SAP integration
+### Resilient SAP integration
 
-Approved workflows are synchronized asynchronously through SQS and transactional Outbox/Inbox patterns. This protects Supplier Management from temporary ERP availability issues.
+Approved workflows synchronize asynchronously through SQS and Transactional Outbox/Inbox patterns. This decouples supplier processing from temporary SAP availability and protects against duplicate deliveries.
+
+## Two different approval problems
+
+Supplier Master AI deliberately distinguishes:
+
+- **Business review:** Is this supplier allowed to proceed?
+- **Agent execution approval:** Is this AI-proposed state-changing tool allowed to run?
+
+They are not the same approval and are persisted/handled by different parts of the architecture.
 
 ## Personas
 
-| Persona | Goal | Main interface |
+| Persona | Primary goal | Main interface |
 |---|---|---|
-| Supplier Operations Analyst | Create and inspect suppliers | Supplier UI |
-| Compliance / Reviewer | Review AI findings and approve/reject | Supplier UI / Agent HITL |
-| Procurement Operations | Understand onboarding status | Supplier UI / Agent |
-| AI / Platform Engineer | Govern models, RAG and agent behavior | Backend / configuration |
-| Integration Engineer | Operate SAP synchronization | Workers, queues, tracing |
+| Supplier Operations Analyst | Create and inspect supplier records | Supplier UI |
+| Compliance / Reviewer | Review risk evidence and decide | Supplier UI / Agent approval |
+| Procurement Operations | Understand onboarding progress | Supplier UI / Agent |
+| AI / Platform Engineer | Govern models, RAG and Agent behavior | Configuration / backend |
+| Integration Engineer | Operate ERP synchronization | Queues, workers, traces |
 
 ## End-to-end business journey
 
@@ -102,43 +98,45 @@ sequenceDiagram
     actor User
     participant UI as React UI
     participant API as Supplier API
-    participant RAG as OpenSearch + Bedrock
-    participant Review as Human Review
+    participant RAG as RAG + Bedrock
+    participant H as Human Review
     participant Q as SQS
     participant SAP as SAP Adapter
 
     User->>UI: Create supplier
-    UI->>API: POST supplier
+    UI->>API: Persist supplier
     User->>UI: Start onboarding
     API->>RAG: Retrieve policies + analyze
-    RAG-->>API: Risk recommendation
+    RAG-->>API: Structured recommendation
 
     alt deterministic rules allow continuation
-        API->>Q: Publish SAP sync request via Outbox
-    else review required
+        API->>Q: Persist/publish SAP request via Outbox
+    else human review required
         API-->>UI: waiting_human_review
-        User->>Review: Approve / reject
-        Review->>API: Decision
-        API->>Q: Publish SAP sync request when approved
+        User->>H: Approve / reject
+        H->>API: Decision
+        API->>Q: Continue only when approved
     end
 
     Q->>SAP: Synchronize supplier
     SAP-->>Q: Result event
-    Q-->>API: Complete workflow
+    Q-->>API: Complete/fail workflow
 ```
 
-## AI governance principles
+## Governance principles
 
-The project deliberately separates probabilistic AI from business authority.
+- **RAG grounds context; it does not authorize transactions.**
+- **LLM interprets and recommends; it does not own workflow transitions.**
+- **Application/domain rules enforce invariants.**
+- **Human review controls business exceptions.**
+- **LangGraph HITL controls Agent-triggered write operations.**
+- **MCP exposes capabilities, not database access.**
+- **Idempotency protects retries and duplicate intentions.**
+- **Outbox/Inbox protect asynchronous integration consistency.**
+- **Correlation IDs make long-running flows traceable.**
 
-- **LLM:** interprets context and recommends.
-- **RAG:** grounds analysis in indexed policy documents.
-- **Application rules:** decide whether automation is allowed.
-- **LangGraph HITL:** gates critical agent actions.
-- **Backend:** enforces domain invariants and persistence.
-- **Idempotency:** protects write operations against duplicate execution.
-- **Audit context:** correlation IDs and persisted workflow state make the process traceable.
+## What the project demonstrates
 
-## Business value demonstrated by the project
+The repository is a reference architecture for using AI in a controlled enterprise workflow. It shows how AI, distributed systems and traditional domain/application boundaries can work together without making an LLM the transaction authority.
 
-This repository demonstrates how an enterprise can use AI without turning an LLM into an unrestricted system-of-record operator. It combines faster analysis with controls expected in real supplier-master, finance, procurement and ERP workflows.
+It intentionally uses fake SAP and ServiceNow adapters for local demonstration while preserving the integration seams required for real implementations.

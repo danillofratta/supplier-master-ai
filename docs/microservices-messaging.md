@@ -1,88 +1,118 @@
 # Microservices messaging boundary
 
-## Services
+## Purpose
 
-### API Supplier
+Supplier Master AI separates Supplier ownership from SAP Integration ownership and uses versioned asynchronous messages rather than cross-database writes.
+
+## Process ownership
+
+### Supplier bounded context
 
 Owns:
 
-- Supplier aggregate
-- Supplier onboarding workflow
-- PostgreSQL persistence
-- Transactional outbox
-- RAG / AI analysis
-- workflow state
+- Supplier aggregate/master data;
+- Supplier onboarding workflow;
+- `supplier_db`;
+- Supplier Transactional Outbox;
+- Supplier Inbox for SAP result messages;
+- RAG/AI onboarding analysis.
+
+Processes sharing this bounded context/database:
+
+1. `api-supplier`;
+2. `worker-supplier-outbox`;
+3. `consumer-supplier-sap-result`.
+
+Sharing the bounded-context database does not mean they bypass application ownership: they use context-specific repositories/Unit of Work implementations.
+
+### SAP Integration bounded context
+
+Owns:
+
+- SAP-specific synchronization operation state;
+- request Inbox/idempotency;
+- SAP gateway adapter;
+- SAP result Transactional Outbox;
+- `sap_integration_db`.
 
 Processes:
 
-1. API process
-2. Outbox publisher process
-3. SAP result consumer process
+1. `consumer-sap`;
+2. `worker-sap-outbox`.
 
-These processes may share the API Supplier code and database because they
-belong to the same bounded context.
-
-### Consumer SAP
-
-Owns:
-
-- SAP integration logic
-- SAP-specific DTOs and adapters
-- message idempotency
-- reconciliation before SAP create
-
-It does not import Supplier-service entities, repositories, Unit of Work, or
-SQLAlchemy models.
+It does not write directly to `supplier_db` or import Supplier persistence models.
 
 ## Integration contracts
 
-Services communicate only through versioned JSON integration events:
+Services communicate through versioned integration events, including:
 
-- `supplier.sap-sync.requested.v1`
-- `supplier.sap-sync.completed.v1`
+- `supplier.sap-sync.requested.v1`;
+- SAP synchronization completion/failure result events represented by the current contracts under `/contracts`.
 
-The repository contains JSON Schema files under `/contracts` only as
-language-neutral documentation/contract definitions. Each microservice has
-its own local DTO representation.
+The repository keeps JSON Schema definitions under `/contracts` as language-neutral contract documentation. Each service owns its local DTO/mapping representation.
 
-## Transactional outbox
+## Message envelope
 
-When a supplier is approved, the API Supplier performs one local
-PostgreSQL transaction:
+The standard envelope contains:
 
-1. workflow -> `SYNCING_TO_SAP`
-2. add `supplier.sap-sync.requested.v1` to the outbox
-3. commit
+```text
+message_id
+correlation_id
+event_type
+version
+occurred_at
+payload
+```
 
-No SAP call occurs inside this transaction.
+- `message_id` uniquely identifies one event for idempotency/diagnostics.
+- `correlation_id` follows the complete onboarding business flow.
 
-The Outbox Processor runs independently, publishes pending records to the
-message broker, and marks them processed.
+## Transactional Outbox — Supplier side
 
-Publishing is intentionally at-least-once. A crash after broker publish but
-before `processed_at` is saved can publish a duplicate. Consumers therefore
-must be idempotent.
+When a workflow is allowed to synchronize:
 
-## Consumer SAP idempotency
+1. workflow transitions to `syncing_to_sap`;
+2. the request integration event is stored in `outbox_messages`;
+3. the Supplier transaction commits.
 
-The Consumer SAP:
+No SAP network call occurs inside this transaction.
 
-1. parses its own copy of the integration contract
-2. checks whether `event_id` was already processed
-3. reconciles by `tax_id` with SAP before creating
-4. creates only when the supplier does not exist
-5. publishes `supplier.sap-sync.completed.v1`
-6. records the request event as processed
+The Supplier Outbox worker later publishes pending events and marks them processed. A crash after broker publish but before saving `processed_at` can publish a duplicate; the design therefore assumes at-least-once delivery.
 
-The reconciliation step handles the ambiguous-timeout case where SAP may
-have created the supplier but the caller did not receive the response.
+## SAP consumer idempotency
+
+The SAP consumer:
+
+1. maps/validates its local message contract;
+2. checks message identity/Inbox state;
+3. persists/loads the SAP synchronization operation;
+4. calls the SAP gateway boundary;
+5. stores the SAP result event in the SAP Integration Outbox;
+6. commits locally;
+7. only then deletes the request message from SQS.
+
+The fake SAP gateway stands in for a production SAP/OData adapter without moving ERP-specific concerns into the Supplier domain.
 
 ## Result flow
 
-The API Supplier consumes the completion event in its own consumer
-process and transitions:
+```text
+sap_integration_db result Outbox
+  ↓
+worker-sap-outbox
+  ↓
+SQS result queue
+  ↓
+consumer-supplier-sap-result
+  ↓ Inbox + workflow update
+supplier_db
+```
 
-`SYNCING_TO_SAP -> COMPLETED`
+This preserves database ownership: SAP Integration never writes directly to Supplier persistence.
 
-This preserves database ownership: the Consumer SAP never writes directly to
-the Supplier database.
+## Retry and DLQ
+
+If a consumer fails before successful commit, the SQS message is left unacknowledged and becomes visible again after the visibility timeout. Inbox/idempotency prevents duplicate side effects, and the configured redrive policy moves repeatedly failing messages to a DLQ.
+
+## Observability
+
+SQS messages propagate business `correlation_id` in their event envelope. OpenTelemetry producer/consumer instrumentation can additionally propagate W3C trace context in SQS message attributes.

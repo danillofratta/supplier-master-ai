@@ -1,31 +1,51 @@
-# Implementation summary
+# Current implementation summary
 
-## End-to-end onboarding
-- Exposed `POST /v1/suppliers/{supplier_id}/onboarding` in Supplier API.
-- Exposed the same operation through API Gateway as `/api/v1/suppliers/{supplier_id}/onboarding`.
-- Wired the existing `StartSupplierOnboardingWorkflowHandler`, AI analysis, deterministic decision, fake ServiceNow review adapter, transactional Outbox and SAP synchronization pipeline.
-- Added explicit human-review decision endpoint: `POST /v1/suppliers/{supplier_id}/onboarding/review-decision` with `approve` or `reject`.
-- Approval resumes the existing workflow and schedules SAP synchronization through the existing transactional Outbox.
-- Rejection moves the workflow to `rejected` with a reason.
-- AI/provider failures mark the workflow `failed` before the original exception is re-raised.
-- Frontend can start/retry onboarding, approve/reject human review and polls while asynchronous SAP synchronization is active.
+This document summarizes the current repository state. It is not a changelog; dated implementation notes remain under `docs/` for historical context.
 
-## Policy ingestion UI
-- Added `POST /v1/policies/ingest` and Gateway route `/api/v1/policies/ingest`.
-- Uses the existing chunker, Titan embedding provider and OpenSearch policy index.
-- Added a **Policy Ingest** screen to the React navigation.
-- Supports metadata, pasted content and loading `.txt`/`.md` content from a local file.
-- Displays chunks indexed and embedding dimensions after success.
+## Implemented application flow
 
-## Docker
-- Added Dockerfiles for all six backend deployables.
-- Added frontend multi-stage Node/Nginx Dockerfile.
-- Added `docker-compose.yml` for PostgreSQL, all backend processes, frontend, OpenTelemetry Collector and Jaeger.
-- Added complete PostgreSQL initialization scripts for `supplier_db` and `sap_integration_db`.
-- Existing Bedrock/OpenSearch settings in `api-supplier/.env` are reused; model IDs and provider configuration were not changed.
-- `.env.docker.example` contains only the values needed to point workers/consumers at the two existing SQS queues.
+- Supplier creation, listing and detail views.
+- RAG-based supplier analysis using Titan embeddings, OpenSearch and Amazon Bedrock.
+- Policy ingestion API and React screen.
+- Governed onboarding workflow with deterministic decision rules.
+- Explicit human review decision endpoint (`approve` / `reject`).
+- Durable onboarding idempotency and concurrency protection.
+- Transactional Supplier Outbox and asynchronous SAP request publication.
+- Idempotent SAP consumer with its own persistence boundary and fake SAP adapter.
+- Transactional SAP result Outbox and asynchronous result publication.
+- Supplier result consumer that completes/fails the persisted workflow.
+- React polling for long-running SAP synchronization.
+
+## Agent layer
+
+- FastAPI Agent API.
+- LangGraph/LangChain runtime with PostgreSQL checkpoints.
+- MCP tools/resources as the business capability boundary.
+- Persistent Agent threads and conversation restoration.
+- LangGraph Human-in-the-Loop interrupts for state-changing tools.
+- Runtime-generated idempotency key for onboarding calls.
+- Composite read-only `investigate_supplier` capability.
+- Bedrock as the default Agent provider, with optional OpenAI/Gemini adapters.
+
+## Runtime and platform
+
+- React + TypeScript frontend.
+- PostgreSQL 16 with separate Supplier, SAP Integration and Agent databases.
+- Single database bootstrap script: `database/init.sql`.
+- AWS SQS request/result queues and DLQs.
+- Structured JSON logging, correlation IDs and OpenTelemetry integration.
+- Jaeger + OpenTelemetry Collector in Docker Compose.
+
+## Local runtime note
+
+`docker compose up --build` starts the core application, databases, workers/consumers, frontend and observability stack. MCP (`:8010`) and Agent API (`:8011`) are currently launched as local Python processes; see `README-RUN-LOCAL.md`.
 
 ## Validation
-- Python compile check passed for all backend services.
-- Existing backend tests: 46 passed.
-- Frontend package/Vite/Docker configuration was added because the uploaded frontend archive contained only `src/`. The sandbox could not complete `npm install` due to network timeout, so the frontend container build should perform the dependency installation in the user's normal Docker environment.
+
+The current automated backend suites for Gateway, Supplier API, consumers and workers run successfully:
+
+```text
+56 passed
+```
+
+`agent-supplier` and `mcp-supplier` do not yet have equivalent automated test suites and remain a documented hardening area.

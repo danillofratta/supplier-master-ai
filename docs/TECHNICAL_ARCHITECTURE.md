@@ -1,25 +1,34 @@
 # Supplier Master AI — Technical Architecture
 
-## Architecture at a glance
+## Architectural objective
+
+Supplier Master AI is designed around one rule: **probabilistic AI may interpret and recommend, but deterministic application code owns business state transitions and side effects**.
+
+The repository is a reference/portfolio architecture, not a production-ready procurement product.
+
+## System context
 
 ```mermaid
 flowchart TB
     UI[React + TypeScript\nOperations Console]
     AGAPI[Agent API\nFastAPI :8011]
-    LG[LangGraph Agent\nPersistent HITL]
+    LG[LangGraph Agent\nHITL + checkpoints]
     MCP[MCP Supplier Server\n:8010]
     GW[API Gateway\n:8000]
     SUP[Supplier API\n:8001]
     SDB[(supplier_db)]
     ADB[(supplier_agent_db)]
-    OS[OpenSearch\nPolicy Vector Index]
+    OS[OpenSearch\nVector index]
     BR[Amazon Bedrock]
-    SQS1[SQS SAP Request]
+    OW1[Supplier Outbox Worker]
+    Q1[AWS SQS\nSAP request]
     SAPC[SAP Consumer]
     SAPDB[(sap_integration_db)]
-    SAP[Fake / Real SAP Adapter]
-    SQS2[SQS SAP Result]
+    SAP[Fake / Real SAP Gateway]
+    OW2[SAP Outbox Worker]
+    Q2[AWS SQS\nSAP result]
     RC[Supplier Result Consumer]
+    OTEL[OpenTelemetry Collector]
 
     UI --> GW
     UI --> AGAPI
@@ -31,53 +40,155 @@ flowchart TB
     SUP --> SDB
     SUP --> OS
     SUP --> BR
-    SDB --> SQS1
-    SQS1 --> SAPC
+    SDB --> OW1 --> Q1 --> SAPC
     SAPC --> SAPDB
     SAPC --> SAP
-    SAPDB --> SQS2
-    SQS2 --> RC
-    RC --> SDB
+    SAPDB --> OW2 --> Q2 --> RC --> SDB
+    GW -. telemetry .-> OTEL
+    SUP -. telemetry .-> OTEL
+    OW1 -. telemetry .-> OTEL
+    SAPC -. telemetry .-> OTEL
+    OW2 -. telemetry .-> OTEL
+    RC -. telemetry .-> OTEL
 ```
 
-## Deployables
+## Deployables and ownership
 
 | Deployable | Responsibility |
 |---|---|
-| `frontend` | React operations console, policy ingest, supplier details, Agent UI and HITL approvals |
-| `api-gateway` | CORS, correlation, downstream proxying, timeout handling |
-| `api-supplier` | Supplier domain, RAG analysis, onboarding workflow, policy ingestion |
-| `mcp-supplier` | Stable AI capability boundary over Supplier APIs |
-| `agent-supplier` | LangChain/LangGraph orchestration, provider selection, checkpoints, HITL, Agent API |
-| `worker-supplier-outbox` | Publishes Supplier integration events |
-| `consumer-sap` | Idempotently consumes SAP sync requests |
-| `worker-sap-outbox` | Publishes SAP integration results |
-| `consumer-supplier-sap-result` | Applies SAP results to Supplier workflow |
+| `frontend` | Supplier operations, policy ingest, onboarding controls, Agent UI |
+| `api-gateway` | Edge proxy, CORS, correlation propagation, downstream availability handling |
+| `api-supplier` | Supplier domain/application, RAG, AI analysis, onboarding, policy ingestion |
+| `mcp-supplier` | AI-facing capability adapter over the public API boundary |
+| `agent-supplier` | LLM selection, LangGraph orchestration, checkpoints, HITL, Agent HTTP API |
+| `worker-supplier-outbox` | Publish Supplier Outbox events |
+| `consumer-sap` | Consume SAP request events, persist operation, call SAP gateway |
+| `worker-sap-outbox` | Publish SAP Integration result Outbox events |
+| `consumer-supplier-sap-result` | Consume SAP results and update Supplier workflow |
 
-## Bounded contexts and database ownership
+## Bounded contexts and databases
 
-### Supplier bounded context
+### Supplier bounded context — `supplier_db`
 
-Owns `supplier_db`.
-
-Used by:
+Owned/used by:
 
 - `api-supplier`;
 - `worker-supplier-outbox`;
 - `consumer-supplier-sap-result`.
 
-### SAP Integration bounded context
+Primary persisted concepts:
 
-Owns `sap_integration_db`.
+- suppliers;
+- supplier onboarding workflows;
+- Supplier Outbox messages;
+- Supplier Inbox/processed result messages.
 
-Used by:
+### SAP Integration bounded context — `sap_integration_db`
+
+Owned/used by:
 
 - `consumer-sap`;
 - `worker-sap-outbox`.
 
-### Agent runtime
+Primary persisted concepts:
 
-Owns `supplier_agent_db` for LangGraph checkpoints. Agent state is infrastructure state and is deliberately separated from Supplier domain persistence.
+- request Inbox messages;
+- SAP synchronization operations;
+- SAP result Outbox messages.
+
+### Agent runtime — `supplier_agent_db`
+
+Used by LangGraph PostgreSQL checkpoints. This is infrastructure/runtime state and is intentionally separate from Supplier domain persistence.
+
+LangGraph owns its checkpoint tables and creates them through `AsyncPostgresSaver.setup()`.
+
+## Database bootstrap
+
+Local/reference database setup is consolidated in:
+
+```text
+database/init.sql
+```
+
+The script can initialize fresh databases and align older local schemas with current required columns/indexes, including onboarding idempotency. Production deployments should use controlled migrations.
+
+## Supplier application architecture
+
+`api-supplier` follows a feature-oriented application structure with domain entities, protocols/repositories, handlers and infrastructure adapters.
+
+Typical write path:
+
+```text
+FastAPI endpoint
+  ↓
+Command / request model
+  ↓
+Application handler/service
+  ↓
+Domain entity transitions
+  ↓
+Unit of Work + repositories
+  ↓
+PostgreSQL
+```
+
+Infrastructure concerns such as SQLAlchemy, Bedrock, OpenSearch and ServiceNow adapters are kept outside domain entities.
+
+## RAG pipeline
+
+```mermaid
+flowchart LR
+    DOC[Policy text] --> CH[Chunker]
+    CH --> EMB[Titan embedding]
+    EMB --> IDX[OpenSearch vector index]
+    S[Supplier] --> Q[Retrieval query]
+    Q --> QE[Titan query embedding]
+    QE --> IDX
+    IDX --> CTX[Relevant policy chunks]
+    CTX --> LLM[Bedrock supplier analyzer]
+    LLM --> OUT[Structured analysis]
+```
+
+### Policy ingestion
+
+The Policy Ingest feature accepts policy metadata/content, chunks the document, creates embeddings and indexes policy chunks.
+
+### Supplier analysis
+
+Supplier context is embedded/searched against the policy index. Retrieved policy chunks ground the Bedrock prompt. The analyzer returns a structured result instead of free-form authorization.
+
+## Governed onboarding workflow
+
+The workflow persists states such as:
+
+```text
+pending
+  ↓
+analyzing
+  ├─→ waiting_human_review ─→ syncing_to_sap
+  ├─→ syncing_to_sap
+  ├─→ rejected
+  └─→ failed
+              ↓
+          completed
+```
+
+Transitions are methods on the domain workflow entity and are checked before state changes.
+
+### Deterministic decision boundary
+
+The AI result may include confidence, risk, missing documents and a recommendation. Application logic determines whether human review is required. This prevents a model response from directly authorizing SAP synchronization.
+
+## Durable onboarding idempotency
+
+`SupplierOnboardingWorkflow` persists an `idempotency_key`.
+
+Database protections include:
+
+- unique idempotency key;
+- partial unique index preventing more than one active (non-failed/non-rejected) onboarding workflow per supplier.
+
+For Agent-originated onboarding, the model does not see this technical argument; the Agent runtime generates it.
 
 ## Agent architecture
 
@@ -88,6 +199,7 @@ sequenceDiagram
     participant AA as Agent API
     participant LG as LangGraph
     participant LLM as Chat Model
+    participant DB as Agent DB
     participant MCP as MCP Server
     participant GW as API Gateway
 
@@ -99,175 +211,136 @@ sequenceDiagram
 
     alt read-only tool
         LG->>MCP: Execute
-        MCP->>GW: Supplier API call
+        MCP->>GW: Public Supplier API request
         GW-->>MCP: Result
-        MCP-->>LG: Tool result
     else state-changing tool
-        LG-->>AA: Interrupt
+        LG->>DB: Persist interrupt/checkpoint
+        LG-->>AA: pending approval
         AA-->>UI: pending_approval
-        User->>UI: Approve / reject
-        UI->>AA: POST approval
+        User->>UI: approve / reject
+        UI->>AA: approval decision
         AA->>LG: Command(resume=...)
-        LG->>MCP: Execute only after approval
+        LG->>MCP: Execute only if approved
     end
 
-    LG-->>AA: Final response
-    AA-->>UI: Conversation history
+    LG-->>AA: Final state/response
 ```
 
-### Persistent conversations
+### Source-of-truth rules
 
-Every conversation has a LangGraph `thread_id`. The PostgreSQL checkpointer persists messages and interrupts, allowing a process restart before an approval is completed.
+The Agent system prompt explicitly requires:
 
-### Technical arguments are not delegated to the LLM
+- tool results as source of truth;
+- Supplier status and onboarding workflow status treated as separate concepts;
+- inconsistencies surfaced instead of guessed away;
+- no claim of execution without tool confirmation;
+- no automatic retry of failed state-changing tools.
 
-`start_supplier_onboarding` is wrapped before being exposed to the model. The LLM sees only the business argument:
+### Composite investigation
 
-```text
-start_supplier_onboarding(supplier_id)
-```
-
-The runtime injects a UUID idempotency key only after human approval:
-
-```text
-LLM tool request
-    ↓
-LangGraph HITL
-    ↓
-Human approve
-    ↓
-Agent wrapper creates uuid4()
-    ↓
-MCP start_supplier_onboarding(supplier_id, idempotency_key)
-```
-
-## Full investigation capability
-
-The Agent adds a composite read-only `investigate_supplier` tool. It concurrently calls the MCP capabilities for:
+`investigate_supplier` concurrently calls:
 
 - `get_supplier`;
 - `analyze_supplier`;
 - `get_onboarding_status`.
 
-Each source is returned independently. A failure in one source is represented as unavailable rather than silently fabricated.
+Each source is normalized independently so one failed source can be reported as unavailable without fabricating data.
 
 ## MCP boundary
 
-The MCP server exposes capabilities rather than database access.
+MCP exposes business capabilities and resources, not persistence internals.
 
-### Read tools
+Read-oriented MCP tools include supplier queries, analysis and onboarding status. State-changing tools include onboarding start, review decisions and policy ingestion.
 
-- `health`
-- `get_supplier`
-- `get_suppliers`
-- `analyze_supplier`
-- `get_onboarding_status`
-
-### State-changing tools
-
-- `start_supplier_onboarding`
-- `approve_supplier_review`
-- `reject_supplier_review`
-- `ingest_supplier_policy`
-
-### Resources
-
-- `supplier://{supplier_id}`
-- `supplier-onboarding://{supplier_id}`
-
-### Prompt
-
-- `investigate_supplier(supplier_id)`
-
-Human approval is an Agent/LangGraph policy boundary. MCP tools do not trust an LLM-supplied `confirmed=true` flag.
-
-## Agent API
-
-Base URL in local development: `http://localhost:8011`.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | Agent API/provider health |
-| `POST` | `/api/agent/threads` | Create conversation ID |
-| `GET` | `/api/agent/threads/{thread_id}` | Restore history and pending approval |
-| `POST` | `/api/agent/threads/{thread_id}/messages` | Send natural-language message |
-| `POST` | `/api/agent/threads/{thread_id}/investigate/{supplier_id}` | Run full read-only investigation |
-| `POST` | `/api/agent/threads/{thread_id}/approval` | Resume HITL with approve/reject |
-
-Example pending approval response:
-
-```json
-{
-  "thread_id": "2d73...",
-  "status": "pending_approval",
-  "message": null,
-  "pending_actions": [
-    {
-      "name": "start_supplier_onboarding",
-      "arguments": {
-        "supplier_id": "76448e91-427e-4b87-9281-06e27e314a23"
-      },
-      "description": "Supplier Master action requires human approval"
-    }
-  ],
-  "history": []
-}
-```
+Human approval is enforced by the Agent runtime, while backend APIs remain responsible for domain invariants and idempotency.
 
 ## Model-provider routing
 
-The Agent runtime uses a provider factory selected by `AGENT_AI_PROVIDER`.
+`agent-supplier` selects a chat provider using `AGENT_AI_PROVIDER`:
 
-Supported selections:
+- `bedrock` (default);
+- `openai` (optional dependency/configuration);
+- `gemini` (optional dependency/configuration).
 
-```text
-bedrock  ← default and existing working path
-openai   ← optional package/config
- gemini  ← optional package/config
-```
+Provider modules are loaded lazily so the default Bedrock installation does not require OpenAI/Gemini packages.
 
-Bedrock remains the default, so existing `AWS_REGION` and `BEDROCK_MODEL_ID` behavior is preserved.
-
-The Supplier RAG analyzer inside `api-supplier` continues to use Amazon Bedrock and Titan/OpenSearch. Agent provider selection does not change the existing Supplier analysis implementation.
-
-## RAG pipeline
-
-```mermaid
-flowchart LR
-    DOC[Policy text] --> CH[Chunker]
-    CH --> EMB[Titan Embeddings]
-    EMB --> IDX[OpenSearch Vector Index]
-    SUP[Supplier context] --> Q[Retrieval query]
-    Q --> EMB2[Titan Embedding]
-    EMB2 --> IDX
-    IDX --> CTX[Relevant policy chunks]
-    CTX --> LLM[Bedrock analysis]
-    LLM --> OUT[Structured risk recommendation]
-```
+This provider factory affects the **Agent**. Supplier RAG analysis in `api-supplier` remains on its Bedrock/Titan/OpenSearch path.
 
 ## Event-driven SAP integration
 
-The system uses separate request and result queues with explicit integration-event envelopes. Messages use at-least-once delivery semantics, so consumers are idempotent.
+The Supplier and SAP Integration contexts communicate through versioned integration events rather than shared repositories/tables.
 
-Reliability patterns include:
+### Supplier request transaction
 
-- Transactional Outbox;
-- Inbox / processed-message tracking;
-- idempotent consumers;
-- unique constraints for business-level duplicate protection;
-- message IDs and correlation IDs;
-- DLQs;
-- trace-context propagation.
+```text
+workflow -> syncing_to_sap
++ supplier.sap-sync.requested.v1 Outbox message
++ commit
+```
+
+No SAP call occurs inside the Supplier transaction.
+
+### SAP processing
+
+The SAP consumer validates the message, protects duplicate processing with Inbox/message identity, persists SAP operation state, calls the SAP gateway and persists a result Outbox event.
+
+### Result processing
+
+The SAP Outbox worker publishes the result queue event. The Supplier result consumer applies completion/failure to the Supplier workflow and tracks processed messages.
+
+## Integration-event contract
+
+The common envelope uses:
+
+```text
+message_id
+correlation_id
+event_type
+version
+occurred_at
+payload
+```
+
+JSON Schema contracts under `/contracts` document the language-neutral message shapes.
 
 ## Observability
 
-Cross-cutting observability uses structured logging and OpenTelemetry. Important identities are kept separate:
+Observability keeps technical and business identities distinct:
 
-- `trace_id`: one technical distributed trace;
-- `correlation_id`: long-running business workflow;
-- `message_id`: one integration event;
-- `thread_id`: one Agent conversation/checkpoint stream.
+- `trace_id` — technical trace;
+- `correlation_id` — onboarding business flow;
+- `message_id` — integration event;
+- `thread_id` — Agent conversation.
 
-## Security model
+Backend services use structured logs and optional OpenTelemetry instrumentation. SQS producer/consumer boundaries can propagate W3C trace context through message attributes.
 
-This is a portfolio/reference implementation. Production hardening should add OIDC/JWT, authorization on Agent/API/MCP capabilities, least-privilege IAM, secret management, audit storage, request-rate controls and production-grade persistent checkpointer migrations.
+## Local runtime topology
+
+The current Docker Compose stack starts the core application, workers/consumers, PostgreSQL, frontend and observability stack. MCP and Agent API are launched as local Python processes in the documented local workflow.
+
+This avoids claiming container orchestration that the current repository does not yet provide for the Agent/MCP path.
+
+## Validation
+
+Current automated backend validation covers Gateway, Supplier API, SAP consumer, Supplier result consumer and both Outbox workers:
+
+```text
+56 passed
+```
+
+Agent/MCP test automation is an explicit next hardening item.
+
+## Security and production hardening
+
+Production should add:
+
+- OIDC/JWT authentication;
+- capability/role authorization at Gateway, APIs, Agent and MCP;
+- least-privilege IAM and managed secrets;
+- immutable audit trail for business and Agent approvals;
+- request/model rate limits and quotas;
+- prompt/model/version governance and evaluation;
+- controlled database migrations and backup/restore;
+- real SAP/ServiceNow adapters;
+- operational DLQ replay procedures;
+- production dashboards/alerts for AI, queues and integrations.

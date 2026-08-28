@@ -1,31 +1,31 @@
-# Implementation package — 2026-08-24
+# Implementation snapshot — 2026-08-24
 
-This update adds the application-facing Agent layer without removing the existing Supplier, RAG, policy-ingest, onboarding or messaging behavior.
+> Historical note: this file records the Agent/UI expansion delivered on 2026-08-24. For the current architecture and runtime instructions, use `README.md`, `docs/TECHNICAL_ARCHITECTURE.md` and `README-RUN-LOCAL.md`.
 
-## Added
+## Added in this snapshot
 
-- FastAPI Agent API over the existing LangGraph runtime.
+- FastAPI Agent API over the LangGraph runtime.
 - React AI Agent page.
-- Persistent conversation restore through LangGraph PostgreSQL checkpoints.
+- Persistent conversation restoration through LangGraph PostgreSQL checkpoints.
 - Web Human-in-the-Loop approval cards.
-- Dedicated comprehensive supplier investigation tool and endpoint.
+- Comprehensive supplier investigation capability.
 - Agent model-provider factory for Bedrock, OpenAI and Gemini.
-- Bedrock remains the default provider.
-- Agent `.env.example` and frontend Agent API environment variable.
+- Bedrock preserved as the default provider.
+- Agent `.env.example` and frontend Agent API URL configuration.
 - Business, technical and Agent/UI documentation.
 
 ## Preserved
 
-- Existing `.env` files are not deleted or replaced.
-- Existing Supplier UI and direct review experience remain available.
-- Existing Policy Ingest frontend remains available.
-- Existing Supplier API RAG implementation remains on Bedrock + Titan + OpenSearch.
-- Existing MCP, Gateway and event-driven SAP flow remain the system boundaries.
+- Existing real `.env` files were not deleted or replaced.
+- Supplier UI and direct business-review experience remained available.
+- Policy Ingest UI remained available.
+- Supplier API RAG implementation remained Bedrock + Titan + OpenSearch.
+- MCP, Gateway and event-driven SAP integration remained architectural boundaries.
 
-## Small consistency correction
+## Consistency correction included
 
-The MCP `ingest_supplier_policy` tool no longer accepts an LLM-supplied `confirmed` boolean. Human approval is enforced by LangGraph HITL, consistent with the other state-changing Agent operations.
+The MCP `ingest_supplier_policy` operation does not accept an LLM-supplied `confirmed` flag. Human approval for Agent-originated state changes is enforced by LangGraph Human-in-the-Loop middleware.
 
-## Deleted files
+## Current follow-up status
 
-None.
+Since this snapshot, project documentation has been consolidated and local database bootstrap is now represented by a single `database/init.sql` script. The current backend validation suite reports `56 passed`; Agent/MCP automated coverage remains a hardening item.

@@ -1,33 +1,61 @@
-# PostgreSQL scripts
+# Database bootstrap
 
-These files are the only database bootstrap/upgrade scripts required by the
-project.
+The `database/` folder now has a **single SQL bootstrap/alignment script**:
 
-## New local environment
-
-```cmd
-psql -U postgres -d postgres -f database\00_create_databases.sql
-psql -U postgres -d supplier_db -f database\01_supplier_db.sql
-psql -U postgres -d sap_integration_db -f database\02_sap_integration_db.sql
+```text
+database/init.sql
 ```
 
-## Existing local environment
+It replaces the previous numbered create/schema/upgrade/verify scripts and the `database/init/` subfolder.
 
-If the databases were created using an older project ZIP, run:
+## What `init.sql` manages
 
-```cmd
-psql -U postgres -d postgres -f database\03_upgrade_existing.sql
+The script:
+
+1. creates `supplier_db`, `sap_integration_db` and `supplier_agent_db` when missing;
+2. creates/alignment-checks the Supplier schema;
+3. creates/alignment-checks the SAP Integration schema;
+4. includes durable onboarding idempotency (`idempotency_key` + unique/partial indexes);
+5. includes `correlation_id`, Inbox/Outbox `attempts` and current status constraints;
+6. returns a small verification summary at the end.
+
+` supplier_agent_db` intentionally has no business tables in this script. LangGraph creates and evolves its checkpoint tables at Agent API startup through `AsyncPostgresSaver.setup()`.
+
+## Docker bootstrap
+
+`docker-compose.yml` mounts the file as a PostgreSQL initialization script:
+
+```text
+./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
 ```
 
-## Verify
+PostgreSQL executes files under `/docker-entrypoint-initdb.d` only when its data directory is initialized for the first time.
 
-```cmd
-psql -U postgres -d postgres -f database\04_verify.sql
+To rebuild the local databases from scratch:
+
+```powershell
+docker compose down -v
+docker compose up --build
 ```
 
-Database ownership:
+## Manual local alignment
 
-- `supplier_db`: API Supplier + Supplier Outbox worker + SAP result consumer.
-- `sap_integration_db`: SAP consumer + SAP Outbox worker.
-- `supplier_agent_db`: LangGraph checkpoints for Agent conversations and HITL interrupts. LangGraph creates its internal tables with `checkpointer.setup()`.
-- No cross-database foreign keys are used.
+Because `init.sql` uses `psql` meta-commands such as `\connect` and `\gexec`, run it through `psql`:
+
+```powershell
+psql -U postgres -d postgres -f database\init.sql
+```
+
+The DDL is written to tolerate re-execution for the current local/reference schema, including backfills for columns added by earlier project versions.
+
+## Production note
+
+The consolidated script is a bootstrap/reference convenience. It is **not a replacement for controlled production migrations**. Application migrations such as the onboarding-idempotency migration remain useful for upgrading deployed environments with explicit change control.
+
+## Ownership
+
+- `supplier_db`: Supplier bounded context.
+- `sap_integration_db`: SAP Integration bounded context.
+- `supplier_agent_db`: LangGraph runtime/checkpoint state.
+
+There are no cross-database foreign keys. Communication between Supplier and SAP Integration occurs through versioned integration events.

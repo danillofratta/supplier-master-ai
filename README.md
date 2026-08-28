@@ -1,709 +1,237 @@
 # Supplier Master AI
 
-> **AI-assisted Supplier Master onboarding using RAG, Amazon Bedrock, OpenSearch, Human-in-the-Loop workflows, event-driven architecture and SAP integration.**
+> Governed enterprise supplier onboarding with RAG, Amazon Bedrock, LangGraph, MCP, Human-in-the-Loop controls, event-driven integration and SAP boundaries.
 
-Supplier Master AI is a reference implementation of a modern enterprise Supplier Master onboarding platform.
+Supplier Master AI is a reference implementation for **AI-assisted Supplier Master onboarding**. The central architectural idea is simple: AI may interpret policy context and recommend an action, but **deterministic application logic remains the authority for business transitions and integration side effects**.
 
-The current version also includes a **stateful Supplier AI Agent** built with LangChain/LangGraph, MCP tools, PostgreSQL checkpoints and web-based Human-in-the-Loop approvals.
+The project combines a React operations console, Python/FastAPI services, PostgreSQL, OpenSearch vector retrieval, Amazon Bedrock, LangGraph, MCP, AWS SQS, Transactional Outbox/Inbox patterns, OpenTelemetry and a replaceable SAP integration adapter.
 
-### Documentation
+## Why this project exists
 
-- [Business Overview](docs/BUSINESS_OVERVIEW.md)
-- [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
-- [Agent API and Web UI](docs/AGENT_API_AND_UI.md)
-- [Messaging Flow](docs/microservices-messaging.md)
-- [Observability](OBSERVABILITY.md)
-- [Local Runtime Guide](README-RUN-LOCAL.md)
+Supplier onboarding in large organizations often requires policy interpretation, master-data validation, risk analysis, human approval and ERP synchronization. These steps are difficult to automate safely when policy knowledge lives in documents and downstream systems are not always available.
 
-
-The system demonstrates how Generative AI can assist complex business workflows while preserving deterministic business rules, auditability, resiliency and human control.
-
-Instead of allowing an LLM to directly execute enterprise actions, the platform combines:
-
-```text
-Enterprise Policies
-        ↓
-       RAG
-        ↓
-AI Recommendation
-        ↓
-Deterministic Rules
-        ↓
-Decision
-   ┌────┴─────┐
-   ↓          ↓
-Automatic   Human
-Workflow    Review
-   │          │
-   └────┬─────┘
-        ↓
-       SAP
-```
-
----
-
-## Business Problem
-
-Supplier onboarding in large organizations commonly involves multiple systems and manual verification steps.
-
-A typical process may require validating supplier information, checking onboarding policies, identifying missing documents, evaluating compliance risks, requesting human approval and finally synchronizing the supplier with an ERP such as SAP.
-
-These workflows tend to become slow and difficult to automate because business policies are frequently expressed as documents rather than executable rules.
-
-Supplier Master AI explores how **RAG and Generative AI can assist this decision process without replacing deterministic workflow controls**.
-
-The AI does not directly create suppliers in SAP.
-
-Instead, it produces a structured recommendation that is evaluated by application rules before the workflow is allowed to continue.
-
----
-
-## End-to-End Workflow
+The design therefore separates probabilistic AI from deterministic business authority:
 
 ```mermaid
-flowchart TD
-
-    A[Create Supplier] --> B[Start Onboarding]
-
-    B --> C[Retrieve Corporate Policies]
-
-    C --> D[Titan Embeddings]
-    D --> E[OpenSearch Vector Search]
-
-    E --> F[Amazon Bedrock]
-    F --> G[Structured AI Analysis]
-
-    G --> H[Deterministic Decision Rules]
-
-    H -->|Automatic Approval| J[Create SAP Sync Event]
-
-    H -->|Human Review Required| I[ServiceNow Review]
-    I -->|Approved| J
-    I -->|Rejected| R[Workflow Rejected]
-
-    J --> K[Transactional Outbox]
-    K --> L[AWS SQS]
-
-    L --> M[SAP Integration Consumer]
-    M --> N[SAP Adapter]
-
-    N --> O[SAP Result Outbox]
-    O --> P[AWS SQS Result Queue]
-
-    P --> Q[Supplier Result Consumer]
-    Q --> S[Workflow Completed]
+flowchart LR
+    P[Corporate policies] --> R[RAG retrieval]
+    R --> AI[LLM structured recommendation]
+    AI --> D[Deterministic rules]
+    D -->|safe to continue| O[Transactional workflow]
+    D -->|review required| H[Human review]
+    H -->|approved| O
+    H -->|rejected| X[Rejected]
+    O --> Q[SQS integration]
+    Q --> SAP[SAP boundary]
 ```
 
----
+**The LLM does not directly write to SAP or the Supplier database.**
 
-## AI Decision Pipeline
-
-The AI workflow is intentionally constrained.
-
-```text
-Supplier
-    ↓
-Build Retrieval Query
-    ↓
-Titan Embeddings
-    ↓
-OpenSearch
-    ↓
-Relevant Corporate Policies
-    ↓
-Bedrock LLM
-    ↓
-Structured Analysis
-    ↓
-Deterministic Validation
-```
-
-The LLM returns a structured response such as:
-
-```json
-{
-  "risk_level": "medium",
-  "recommended_action": "human_review",
-  "confidence": 0.87,
-  "missing_documents": [],
-  "policy_violations": [],
-  "summary": "Supplier requires additional validation."
-}
-```
-
-The application then applies deterministic rules.
-
-For example:
-
-```text
-confidence < threshold
-        ↓
-HUMAN REVIEW
-
-missing documents
-        ↓
-HUMAN REVIEW
-
-high risk
-        ↓
-HUMAN REVIEW
-```
-
-This prevents an LLM response from independently authorizing a critical enterprise operation.
-
----
-
-## Retrieval-Augmented Generation
-
-Corporate supplier policies can be ingested directly from the application.
-
-```text
-Policy Document
-      ↓
-Chunking
-      ↓
-Titan Embeddings
-      ↓
-OpenSearch
-      ↓
-Vector Index
-```
-
-During supplier analysis:
-
-```text
-Supplier Context
-      ↓
-Embedding
-      ↓
-Semantic Search
-      ↓
-Relevant Policy Chunks
-      ↓
-Bedrock Prompt Context
-```
-
-The frontend includes a **Policy Ingest** interface for adding or updating policies without running maintenance scripts manually.
-
----
-
-## Human-in-the-Loop
-
-Not every AI recommendation should be executed automatically.
-
-When the confidence level or risk profile requires human intervention, the workflow moves to:
-
-```text
-WAITING_HUMAN_REVIEW
-```
-
-The current implementation includes a ServiceNow integration boundary and a fake adapter for local demonstrations.
-
-A reviewer can:
-
-```text
-APPROVE
-   ↓
-Continue SAP synchronization
-
-REJECT
-   ↓
-Stop onboarding
-```
-
-This pattern allows AI to assist the workflow while keeping business-critical decisions auditable and controllable.
-
----
-
-## Event-Driven Architecture
-
-SAP synchronization is asynchronous.
+## Architecture at a glance
 
 ```mermaid
-sequenceDiagram
-    participant API as Supplier API
-    participant DB as Supplier DB
-    participant OW as Supplier Outbox Worker
-    participant SQS as AWS SQS
-    participant SAPC as SAP Consumer
-    participant SAPDB as SAP Integration DB
-    participant SAPW as SAP Outbox Worker
-    participant RC as Result Consumer
+flowchart TB
+    UI[React + TypeScript\nOperations Console]
+    AGAPI[Agent API\nFastAPI :8011]
+    LG[LangGraph Agent\nPersistent HITL]
+    MCP[MCP Supplier Server\n:8010]
+    GW[API Gateway\n:8000]
+    SUP[Supplier API\n:8001]
+    SDB[(supplier_db)]
+    ADB[(supplier_agent_db)]
+    OS[OpenSearch\nPolicy Vector Index]
+    BR[Amazon Bedrock]
+    OW1[Supplier Outbox Worker]
+    Q1[SQS SAP Request]
+    SAPC[SAP Consumer]
+    SAPDB[(sap_integration_db)]
+    SAP[Fake / Real SAP Adapter]
+    OW2[SAP Outbox Worker]
+    Q2[SQS SAP Result]
+    RC[Supplier Result Consumer]
 
-    API->>DB: Save Workflow + Outbox Event
-    OW->>DB: Read Pending Outbox
-    OW->>SQS: Publish SAP Sync Request
-
-    SQS->>SAPC: Consume Request
-    SAPC->>SAPDB: Inbox + SAP Operation
-    SAPC->>SAPDB: Create Result Outbox
-
-    SAPW->>SAPDB: Read Result Outbox
-    SAPW->>SQS: Publish SAP Result
-
-    SQS->>RC: Consume Result
-    RC->>DB: Complete Workflow
+    UI --> GW
+    UI --> AGAPI
+    AGAPI --> LG
+    LG --> ADB
+    LG --> MCP
+    MCP --> GW
+    GW --> SUP
+    SUP --> SDB
+    SUP --> OS
+    SUP --> BR
+    SDB --> OW1 --> Q1 --> SAPC
+    SAPC --> SAPDB
+    SAPC --> SAP
+    SAPDB --> OW2 --> Q2 --> RC --> SDB
 ```
 
----
+## Main capabilities
 
-## Reliability Patterns
-
-The project uses enterprise messaging patterns to deal with failures and at-least-once message delivery.
-
-| Pattern | Purpose |
-|---|---|
-| Transactional Outbox | Prevents losing integration events after database commits |
-| Inbox | Tracks consumed messages |
-| Idempotent Consumers | Protect against duplicate SQS deliveries |
-| Correlation ID | Follows a business workflow across services |
-| Message ID | Identifies one integration event |
-| Retry / DLQ | Handles transient and poison-message failures |
-| Unit of Work | Coordinates transactional persistence |
-| Explicit Integration Events | Decouples bounded contexts |
-
----
-
-## Bounded Contexts
-
-The system intentionally separates Supplier Management from SAP Integration.
-
-### Supplier Context
-
-Owns:
-
-```text
-supplier_db
-```
-
-Used by:
-
-```text
-api-supplier
-worker-supplier-outbox
-consumer-supplier-sap-result
-```
-
-Responsibilities include supplier lifecycle, AI analysis, onboarding workflow and outbound SAP synchronization requests.
-
-### SAP Integration Context
-
-Owns:
-
-```text
-sap_integration_db
-```
-
-Used by:
-
-```text
-consumer-sap
-worker-sap-outbox
-```
-
-Responsibilities include idempotent SAP request processing, ERP integration and publishing SAP synchronization results.
-
-**The Supplier context never directly accesses the SAP Integration database.**
-
----
+- Supplier master-data creation and query.
+- Policy ingestion from text/Markdown into OpenSearch.
+- Titan embeddings and semantic policy retrieval.
+- Bedrock-based structured supplier analysis.
+- Deterministic onboarding workflow transitions.
+- Business Human-in-the-Loop review for risky/uncertain cases.
+- Stateful LangGraph AI Agent with PostgreSQL checkpoints.
+- Agent Human-in-the-Loop approval before state-changing tools.
+- MCP capability boundary between the Agent and business APIs.
+- Durable onboarding idempotency.
+- Transactional Outbox/Inbox and idempotent SQS consumers.
+- Separate Supplier and SAP Integration database ownership.
+- Correlation IDs, structured logs and OpenTelemetry traces.
+- Fake ServiceNow and SAP adapters that preserve production integration boundaries.
 
 ## Deployables
 
-```text
-backend/
-├── api-gateway/
-├── api-supplier/
-├── mcp-supplier/
-├── agent-supplier/
-├── worker-supplier-outbox/
-├── consumer-sap/
-├── worker-sap-outbox/
-└── consumer-supplier-sap-result/
-
-frontend/
-└── React + TypeScript operations console + AI Agent UI
-```
-
----
-
-## Architecture
-
-```mermaid
-flowchart LR
-
-    UI[React / TypeScript] --> GW[API Gateway]
-
-    GW --> SUP[Supplier API]
-
-    SUP --> SDB[(Supplier PostgreSQL)]
-    SUP --> BR[Amazon Bedrock]
-    SUP --> OS[OpenSearch]
-
-    SDB --> OW[Supplier Outbox Worker]
-    OW --> Q1[AWS SQS]
-
-    Q1 --> SC[SAP Consumer]
-    SC --> SAPDB[(SAP Integration DB)]
-    SC --> SAP[SAP Adapter]
-
-    SAPDB --> SOW[SAP Outbox Worker]
-    SOW --> Q2[AWS SQS]
-
-    Q2 --> SRC[Supplier Result Consumer]
-    SRC --> SDB
-
-    SUP --> SN[ServiceNow Adapter]
-```
-
----
-
-## Supplier AI Agent
-
-The project includes a LangChain/LangGraph Agent exposed through a FastAPI Agent API and a React chat interface.
-
-```mermaid
-flowchart LR
-    UI[React Agent UI] --> AA[Agent API :8011]
-    AA --> LG[LangGraph]
-    LG --> CP[(PostgreSQL checkpoints)]
-    LG --> LLM[Chat Model]
-    LG --> MCP[MCP Supplier :8010]
-    MCP --> GW[API Gateway :8000]
-    GW --> SUP[Supplier API :8001]
-```
-
-The Agent supports multi-turn conversations, comprehensive supplier investigations and governed state-changing operations. Critical writes are paused by `HumanInTheLoopMiddleware` and resumed only after an explicit approve/reject decision from the application.
-
-A composite read-only investigation capability collects:
-
-```text
-Supplier master data
-+
-RAG / AI risk analysis
-+
-Persisted onboarding workflow state
-```
-
-The Agent model provider is configurable. **Amazon Bedrock remains the default and existing working path**; OpenAI and Gemini are optional alternatives loaded through provider-specific extras.
-
-See [Agent API and Web UI](docs/AGENT_API_AND_UI.md) for endpoints, configuration and local run instructions.
-
----
-
-## API Gateway
-
-The frontend communicates exclusively with the API Gateway.
-
-```text
-Frontend
-   ↓
-API Gateway :8000
-   ↓
-Supplier API :8001
-```
-
-The gateway is responsible for edge concerns such as correlation IDs, CORS, downstream timeouts, health checks and HTTP proxying.
-
-Main routes include:
-
-```text
-GET  /api/v1/suppliers
-POST /api/v1/suppliers
-
-GET  /api/v1/suppliers/{supplier_id}
-
-POST /api/v1/suppliers/{supplier_id}/analysis
-
-GET  /api/v1/suppliers/{supplier_id}/onboarding
-POST /api/v1/suppliers/{supplier_id}/onboarding
-
-POST /api/v1/suppliers/{supplier_id}/onboarding/review-decision
-
-POST /api/v1/policies/ingest
-```
-
----
-
-## Observability
-
-Observability is implemented as a cross-cutting concern across all backend services.
-
-The platform uses:
-
-```text
-OpenTelemetry
-Structured JSON Logging
-Correlation IDs
-Trace IDs
-Span IDs
-Jaeger
-```
-
-The Supplier AI pipeline exposes spans similar to:
-
-```text
-POST /analysis
-│
-└── AnalyzeSupplier
-    │
-    ├── PostgreSQL
-    │
-    ├── Policy Retrieval
-    │   ├── Titan Embedding
-    │   └── OpenSearch
-    │
-    └── Bedrock Analysis
-```
-
-Structured logs include contextual fields such as:
-
-```text
-service
-correlation_id
-trace_id
-span_id
-supplier_id
-workflow_id
-message_id
-event_type
-component
-duration_ms
-```
-
-Prompts, AWS credentials and sensitive policy contents are intentionally excluded from logs.
-
----
-
-## Distributed Tracing and Messaging
-
-HTTP trace context is automatically propagated between the API Gateway and downstream services.
-
-SQS producers also propagate W3C trace context using message attributes:
-
-```text
-traceparent
-tracestate
-baggage
-```
-
-Business operations additionally use:
-
-```text
-correlation_id
-```
-
-to correlate the complete onboarding workflow independently of individual technical traces.
-
----
-
-## Technology Stack
-
-| Area | Technology |
+| Deployable | Responsibility |
 |---|---|
-| Backend | Python 3.11, FastAPI |
-| Frontend | React, TypeScript, Vite |
-| Supplier AI | Amazon Bedrock |
-| Agent orchestration | LangChain, LangGraph, MCP |
-| Agent default model provider | Amazon Bedrock |
-| Optional Agent providers | OpenAI, Gemini |
-| LLM | GPT-OSS through Bedrock |
-| Embeddings | Amazon Titan Embeddings |
-| RAG | OpenSearch Vector Search |
-| Database | PostgreSQL (Supplier, SAP Integration, Agent checkpoints) |
-| Messaging | AWS SQS |
-| Persistence | SQLAlchemy |
-| Architecture | DDD, CQRS / Vertical Slice |
-| Messaging patterns | Outbox, Inbox, Idempotency |
-| Observability | OpenTelemetry, Jaeger |
-| Containers | Docker, Docker Compose |
-| ERP integration | SAP Adapter Boundary |
-| Human Workflow | ServiceNow Adapter Boundary |
+| `frontend` | React operations console, supplier screens, policy ingest and Agent UI |
+| `api-gateway` | Public `/api` edge, CORS, correlation propagation and downstream errors |
+| `api-supplier` | Supplier domain, policy RAG, AI analysis and onboarding workflow |
+| `mcp-supplier` | MCP tools/resources over the public business API boundary |
+| `agent-supplier` | LangGraph orchestration, model selection, checkpoints, HITL and Agent API |
+| `worker-supplier-outbox` | Publishes Supplier integration events to SQS |
+| `consumer-sap` | Idempotently consumes SAP synchronization requests |
+| `worker-sap-outbox` | Publishes SAP integration results to SQS |
+| `consumer-supplier-sap-result` | Applies SAP results to the Supplier workflow |
 
----
+## AI governance model
 
-## Running with Docker
+The platform deliberately uses two distinct Human-in-the-Loop mechanisms.
 
-Create your local Docker environment configuration:
+### Business review
 
-```powershell
-Copy-Item .env.docker.example .env.docker
+The Supplier onboarding workflow can enter `waiting_human_review` when confidence is low, documents are missing or risk is high. Approval or rejection changes persisted business workflow state.
+
+### Agent tool approval
+
+When the LangGraph Agent proposes a state-changing MCP tool, `HumanInTheLoopMiddleware` interrupts the Agent execution and persists the pending action in PostgreSQL. The tool runs only after an explicit approve decision.
+
+These mechanisms solve different problems: one governs the **business process** and the other governs **agent execution**.
+
+## RAG and decision pipeline
+
+```mermaid
+flowchart LR
+    DOC[Policy document] --> CH[Chunking]
+    CH --> EMB[Titan embedding]
+    EMB --> IDX[OpenSearch vector index]
+    S[Supplier context] --> QE[Query embedding]
+    QE --> IDX
+    IDX --> CTX[Relevant policy chunks]
+    CTX --> LLM[Bedrock]
+    LLM --> OUT[Structured risk analysis]
+    OUT --> RULES[Deterministic decision rules]
 ```
 
-Configure your AWS profile and SQS queue URLs, then run:
+The AI output is structured and includes fields such as risk level, recommended action, confidence, missing documents and policy violations. Application rules decide whether the workflow can continue automatically.
 
-```powershell
-docker compose up --build
+## Agent boundary
+
+The Agent does not receive database credentials or repositories. Its path is:
+
+```text
+User → Agent API → LangGraph → MCP → API Gateway → Supplier API → Domain/Persistence
 ```
 
-Services are available at:
+Technical reliability arguments are also kept outside the model. For example, the LLM sees `start_supplier_onboarding(supplier_id)` while the runtime generates the idempotency key.
+
+## Event-driven SAP synchronization
+
+SAP synchronization is asynchronous and uses separate request/result flows:
+
+```text
+supplier_db
+  ↓ Transactional Outbox
+Supplier Outbox Worker
+  ↓
+SQS request queue
+  ↓
+SAP Consumer
+  ↓ Inbox + SAP operation + result Outbox
+sap_integration_db
+  ↓
+SAP Outbox Worker
+  ↓
+SQS result queue
+  ↓
+Supplier Result Consumer
+  ↓
+supplier_db
+```
+
+The system assumes at-least-once message delivery. Inbox tracking, message IDs and idempotent application behavior protect against duplicate deliveries.
+
+## Database ownership
+
+| Database | Owner / use |
+|---|---|
+| `supplier_db` | Supplier API, Supplier Outbox Worker, Supplier SAP Result Consumer |
+| `sap_integration_db` | SAP Consumer, SAP Outbox Worker |
+| `supplier_agent_db` | LangGraph checkpoint/runtime state only |
+
+Database bootstrap is consolidated in **`database/init.sql`**. The script creates the three databases and aligns the Supplier/SAP schemas. LangGraph creates its checkpoint tables at Agent startup through `AsyncPostgresSaver.setup()`.
+
+## Local development
+
+See [README-RUN-LOCAL.md](README-RUN-LOCAL.md) for the complete procedure.
+
+Core services are started with Docker Compose. The current repository runs MCP and the Agent API as local Python processes so the React Agent UI can reach `localhost:8011` and the Agent can reach MCP on `localhost:8010`.
+
+Important local endpoints:
 
 | Component | URL |
 |---|---|
 | Frontend | `http://localhost:5173` |
 | API Gateway | `http://localhost:8000` |
-| Supplier API Swagger | `http://localhost:8001/docs` |
+| Supplier API / Swagger | `http://localhost:8001/docs` |
+| MCP | `http://localhost:8010/mcp` |
+| Agent API | `http://localhost:8011` |
 | Jaeger | `http://localhost:16686` |
 | PostgreSQL | `localhost:5432` |
 
-The MCP Supplier server (`:8010`) and Agent API (`:8011`) can be run locally from their backend projects. The Agent API is started with:
+## Validation status
 
-```powershell
-cd backend\agent-supplier
-python -m supplier_agent.api_main
-```
-
-The frontend reads `VITE_AGENT_API_URL` (default `http://localhost:8011/api`).
-
----
-
-## Local Development
-
-For development, the recommended setup is:
+The current backend test suites for Gateway, Supplier API, messaging consumers and Outbox workers were executed together using pytest importlib mode:
 
 ```text
-Docker
-├── PostgreSQL
-├── OpenTelemetry Collector
-└── Jaeger
-
-VS Code
-├── API Gateway
-├── Supplier API
-├── Workers
-└── Consumers
-
-Vite
-└── React frontend
+56 passed
 ```
 
-Start infrastructure:
+The repository currently has no equivalent automated test suite for `agent-supplier` or `mcp-supplier`; those components should be treated as an explicit next hardening area rather than implied test coverage.
 
-```powershell
-docker compose up -d postgres jaeger otel-collector
-```
+## Production hardening still required
 
-The repository includes VS Code launch configurations for debugging the backend services with breakpoints.
+This is a portfolio/reference architecture, not a production-ready Supplier Master product. A production deployment should additionally include:
 
----
+- OIDC/JWT authentication and capability-level authorization;
+- least-privilege IAM and managed secret storage;
+- immutable audit records for business and Agent approvals;
+- rate limits, quotas and abuse controls;
+- production migration tooling and backup/restore procedures;
+- Agent/MCP automated tests and evaluation suites;
+- model/prompt/version governance and AI quality evaluation;
+- production SAP and ServiceNow adapters;
+- queue alarms, DLQ operations and replay procedures;
+- cost, latency and model-quality monitoring.
 
-## Testing
+## Documentation
 
-The backend contains automated tests across all deployables covering application handlers, gateway behavior, messaging mapping, AI integration boundaries and workflow processing.
+- [Business Overview](docs/BUSINESS_OVERVIEW.md)
+- [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
+- [Agent API and Web UI](docs/AGENT_API_AND_UI.md)
+- [Microservices Messaging](docs/microservices-messaging.md)
+- [Run Messaging Flow](docs/RUN_MESSAGING_FLOW.md)
+- [Observability](OBSERVABILITY.md)
+- [Local Runtime Guide](README-RUN-LOCAL.md)
+- [Database Bootstrap](database/README.md)
+- [Onboarding Idempotency](backend/IDEMPOTENCY-IMPLEMENTATION.md)
+- [API Gateway](backend/api-gateway/README.md)
+- [ADR 001 — Governed deterministic workflow](docs/decisions/001-determinisc-workflow-with-ai.md)
+- [ADR 002 — Unit of Work boundary](docs/decisions/002-unit-of-work-persistence-boundary.md)
 
-The architecture is designed so external systems such as SAP and ServiceNow can be replaced by fake adapters during tests.
+## Repository safety
 
----
-
-## Current Integration Boundaries
-
-This repository intentionally uses:
-
-```text
-FakeSapGateway
-FakeServiceNowGateway
-```
-
-for local execution.
-
-They implement the same application boundaries that production adapters would use.
-
-A production implementation could replace them with:
-
-```text
-SAP OData / BAPI Adapter
-ServiceNow REST Adapter
-```
-
-without changing the core application workflow.
-
----
-
-## Design Decisions
-
-### Why not let the LLM execute SAP operations directly?
-
-Because LLM output is probabilistic.
-
-The LLM provides a recommendation; deterministic application rules decide whether the workflow may proceed.
-
-### Why RAG instead of placing policies directly in the prompt?
-
-Enterprise policies change independently from application releases.
-
-RAG allows the system to retrieve the most relevant policy fragments dynamically.
-
-### Why asynchronous SAP integration?
-
-ERP integrations can be slow or temporarily unavailable.
-
-SQS combined with Outbox/Inbox and idempotency decouples Supplier Management from SAP availability.
-
-### Why separate Supplier and SAP databases?
-
-The contexts represent different business responsibilities.
-
-Database ownership reinforces service boundaries and prevents accidental coupling.
-
-### Why both `trace_id` and `correlation_id`?
-
-A trace represents a technical execution path.
-
-A correlation ID represents the long-running business workflow, which may span multiple traces and asynchronous operations.
-
----
-
-## Production Hardening
-
-The repository demonstrates the architecture and main runtime workflow.
-
-A production deployment would additionally introduce:
-
-```text
-Real SAP adapter
-Real ServiceNow adapter
-OIDC/JWT authentication
-RBAC
-Secrets Manager
-IAM least privilege
-Infrastructure as Code
-CI/CD
-Automated end-to-end tests
-DLQ terminal failure processor
-Production monitoring and alerting
-```
-
----
-
-## What This Project Demonstrates
-
-This repository is intended to demonstrate more than an AI API call.
-
-It combines:
-
-```text
-Generative AI
-+
-RAG
-+
-MCP
-+
-LangGraph Agents
-+
-Persistent Human-in-the-Loop
-+
-Responsible AI
-+
-DDD
-+
-Event-Driven Architecture
-+
-Reliable Messaging
-+
-Enterprise Integration
-+
-Distributed Observability
-```
-
-The central architectural principle is:
-
-> **AI recommends. Deterministic software decides. Enterprise workflows remain auditable.**
+Real `.env` files are intentionally excluded by `.gitignore`. Commit only example configuration files and placeholders. Never publish local archives containing real environment files or credentials.

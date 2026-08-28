@@ -1,36 +1,37 @@
 # Run the distributed messaging flow
 
+This guide focuses on the Supplier → SAP request → SAP result integration path.
+
 ## 1. PostgreSQL
 
-Start PostgreSQL:
+For Docker-based local development, start PostgreSQL and the core services with:
 
-```cmd
-docker compose up -d
+```powershell
+docker compose up --build
 ```
 
-For a new environment:
+Database bootstrap is consolidated in:
 
-```cmd
-psql -U postgres -d postgres -f database\00_create_databases.sql
-psql -U postgres -d supplier_db -f database\01_supplier_db.sql
-psql -U postgres -d sap_integration_db -f database\02_sap_integration_db.sql
+```text
+database/init.sql
 ```
 
-For databases created from an older project ZIP:
+To align a manually managed local PostgreSQL instance:
 
-```cmd
-psql -U postgres -d postgres -f database\03_upgrade_existing.sql
+```powershell
+psql -U postgres -d postgres -f database\init.sql
 ```
 
-Verify:
+To rebuild the Docker PostgreSQL volume from scratch:
 
-```cmd
-psql -U postgres -d postgres -f database\04_verify.sql
+```powershell
+docker compose down -v
+docker compose up --build
 ```
 
-## 2. AWS SQS / DLQ
+## 2. AWS SQS / DLQ topology
 
-The application expects:
+The application expects request/result queues and their DLQs:
 
 ```text
 supplier-sap-sync-requests
@@ -39,74 +40,102 @@ supplier-sap-sync-results
 supplier-sap-sync-results-dlq
 ```
 
-To create or reconcile the topology:
+Create/reconcile the topology:
 
-```cmd
+```powershell
 python scripts\aws\setup_sqs.py
 ```
 
-The script configures long polling, a 60-second visibility timeout and
-`maxReceiveCount=5`.
+The setup script configures long polling, visibility timeout and a redrive policy with `maxReceiveCount=5`.
 
-Because this version introduces a new standard event envelope, old local
-test messages should be removed once. To purge the four queues during
-setup:
+If you intentionally need to purge old local test messages during topology setup:
 
-```cmd
-set SQS_PURGE_EXISTING=true
-python scripts\\aws\\setup_sqs.py
+```powershell
+$env:SQS_PURGE_EXISTING = 'true'
+python scripts\aws\setup_sqs.py
 ```
 
-## 3. Run the messaging processes
+Do not enable queue purging in a shared/production environment.
 
-Supplier Outbox:
+## 3. Processes in the flow
 
-```cmd
+### Supplier Outbox publisher
+
+```powershell
 cd backend\worker-supplier-outbox
 python -m worker_supplier_outbox.main
 ```
 
-SAP request consumer:
+### SAP request consumer
 
-```cmd
+```powershell
 cd backend\consumer-sap
 python -m consumer_sap.main
 ```
 
-SAP result Outbox:
+### SAP result Outbox publisher
 
-```cmd
+```powershell
 cd backend\worker-sap-outbox
 python -m worker_sap_outbox.main
 ```
 
-Supplier SAP result consumer:
+### Supplier SAP result consumer
 
-```cmd
+```powershell
 cd backend\consumer-supplier-sap-result
 python -m consumer_supplier_sap_result.main
 ```
 
-## Reliability behavior
+Docker Compose already starts these processes in the core stack.
 
-Messages are deleted from SQS only after local persistence commits.
+## 4. Reliability behavior
 
-If a consumer fails:
+### Supplier transaction
 
-1. the message is not deleted;
-2. SQS makes it visible again after the visibility timeout;
-3. Inbox/idempotency protects against duplicate side effects;
-4. after repeated failures the SQS redrive policy sends it to the DLQ.
+When onboarding is approved/allowed:
 
-All new integration events carry:
+1. workflow moves to `syncing_to_sap`;
+2. a `supplier.sap-sync.requested.v1` event is stored in the Supplier Outbox;
+3. both changes commit in the local Supplier database transaction.
 
-- `message_id`: unique message identity;
-- `correlation_id`: end-to-end flow identity;
+The Outbox worker later publishes the event. Publishing is at-least-once, so the consumer must tolerate duplicates.
+
+### SAP request consumer
+
+The SAP consumer:
+
+1. validates/maps the integration event;
+2. uses Inbox/message identity for duplicate protection;
+3. persists SAP synchronization operation state;
+4. calls the SAP gateway boundary;
+5. stores a result event in the SAP Integration Outbox;
+6. commits before deleting the SQS request message.
+
+### Result path
+
+The SAP Outbox worker publishes the result event. The Supplier result consumer uses its Inbox and updates the Supplier onboarding workflow to its final state.
+
+## 5. Message envelope
+
+Integration events carry:
+
+- `message_id`;
+- `correlation_id`;
 - `event_type`;
 - `version`;
 - `occurred_at`;
 - `payload`.
 
-The same `correlation_id` is propagated from Supplier onboarding through SAP
-request and SAP result messages. Runtime processes emit structured JSON logs
-containing those identifiers.
+`message_id` identifies one event. `correlation_id` follows the end-to-end onboarding flow.
+
+## 6. Retry and DLQ behavior
+
+When a consumer fails before successful local commit:
+
+1. the SQS message is not deleted;
+2. it becomes visible after the visibility timeout;
+3. Inbox/idempotency protects duplicate processing;
+4. after repeated receives, the redrive policy moves it to the DLQ.
+
+Operationally, DLQ replay should be a controlled action after the underlying error is understood.
