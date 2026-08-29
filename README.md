@@ -1,4 +1,4 @@
-# Supplier Master AI
+# Supplier Master AI — Agentic AI, RAG & Enterprise Workflow Platform
 
 > Governed enterprise supplier onboarding with RAG, Amazon Bedrock, LangGraph, MCP, Human-in-the-Loop controls, event-driven integration and SAP boundaries.
 
